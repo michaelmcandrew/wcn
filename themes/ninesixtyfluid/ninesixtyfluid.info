@@ -1,0 +1,28 @@
+; $Id: 
+
+name = 960 Grid System Fluid
+description = A blank base theme using the 960 Grid System. See the "README.txt" file within the theme folder for more information.
+screenshot = images/screenshot.png
+version = .01
+core = 6.x
+engine = phptemplate
+
+; Stylesheets. Anything within the "framework" folder will be placed before all others.
+stylesheets[all][] = styles/framework/reset.css
+stylesheets[all][] = styles/framework/text.css
+stylesheets[all][] = styles/framework/grid.css
+stylesheets[all][] = styles/framework/layout.css
+stylesheets[all][] = styles/framework/nav.css
+
+; Theme specific styles. Any sub-themes should override this.
+stylesheets[all][] = styles/styles.css
+
+
+
+
+; Information added by drupal.org packaging script on 2009-07-08
+version = "6.x-1.4"
+core = "6.x"
+project = "ninesixtyfluid"
+datestamp = "1247035235"
+

@@ -1,0 +1,27 @@
+name        = Fervens
+description = Fervens is a 3 column theme that has a base idea of "freshness". Originally designed by <a href="http://designdisease.com">Design Disease</a> for WordPress.<br />Ported to Drupal theme by <a href="http://kahthong.com">Leow Kah Thong</a>.
+screenshot  = screenshot.png
+version     = VERSION
+core        = 6.x
+engine      = phptemplate
+
+regions[header]  = Header
+regions[content] = Content
+regions[left]    = Left sidebar
+regions[right]   = Right sidebar
+
+features[] = name
+features[] = node_user_picture
+features[] = comment_user_picture
+features[] = favicon
+features[] = primary_links
+
+stylesheets[all][] = style.css
+
+
+; Information added by drupal.org packaging script on 2009-01-03
+version = "6.x-1.0-beta1"
+core = "6.x"
+project = "fervens"
+datestamp = "1230955514"
+

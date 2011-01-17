@@ -1,0 +1,6 @@
+=====================
+Fervens 6.x 1.0 beta1
+=====================
+2 Jan 2009 - First release.
+           - Tested with most browsers; Firefox 3, Firefox 2, IE7, IE6,
+             Safari 3.2, Google Chrome, Opera 9.6.
