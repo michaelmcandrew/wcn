@@ -1,0 +1,819 @@
+<?php
+// $Id: montharchive.module,v 1.9.2.7 2009/09/11 23:01:19 prometheus6 Exp $
+
+
+/**
+ * @file
+ *	Module provides a non-Views based monthly archive
+ */
+
+define('ARCHIVEROOTBEFORETYPE', 1);
+define('TYPEBEFOREARCHIVEROOT', 2);
+
+function montharchive_access_page($archive_type) {
+  if (is_string($archive_type)) {
+    $archive_types = variable_get('montharchive_block_node_type', array());
+    return user_access('access content') and ($archive_types[$archive_type]);
+  }
+  elseif (is_null($archive_type)) {return user_access('access content');}
+}
+
+function _montharchive_author_block_title_form($requested_type) {
+  $tokens = montharchive_token_list('montharchive_author_block');
+  foreach ($tokens['montharchive'] as $key => $value) {
+    $token_help[] = "<strong>$key</strong>: $value";
+  }
+  $form['block_title'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Block title',
+    '#default_value' => variable_get('montharchive_block_title_by_user_'. $requested_type,'[user_name]\'s [type_name] archives'),
+  );
+  $form['block_title_help'] = array(
+    '#tree' => FALSE, 
+    '#type' => 'fieldset', 
+    '#collapsible' => TRUE, 
+    '#collapsed' => TRUE, 
+    '#title' => t('Replacement patterns'), 
+    'output' => array(
+      '#type' => 'markup', 
+      '#value' => theme('item_list', $token_help), 
+      '#prefix' => '<div>', 
+      '#sufffix' => '</div>',
+    )
+  );
+  return $form;  
+}
+
+function montharchive_author_load($montharchive_author) {
+  if (is_numeric($montharchive_author)) {
+  	$user_params['uid'] = $montharchive_author;  	
+  }
+  elseif (is_string($montharchive_author)) {
+    // reject user names with spaces because they are ugly
+    if (strstr($montharchive_author, ' ')) {
+      return FALSE;
+    }
+    // convert dashes to spaces
+    $montharchive_author = str_replace('-', ' ', $$user_params['uid'] = $montharchive_author); 
+    $user_params['name'] = $montharchive_author;
+  }
+  else {
+    return FALSE;
+  }
+  return user_load($user_params);
+}
+
+/**
+ * hook_block() implementation.
+ *
+ */
+function montharchive_block($op = 'list', $delta = 0, $edit = array()) {
+  $requested_types = variable_get('montharchive_block_node_type', array());
+  $requested_types_by_user = variable_get('montharchive_block_node_type_by_user', array());
+  switch ($op) {
+    case 'configure':      
+      if (strstr($delta, 'montharchive_by_user_')) {
+        $requested_type = substr($delta, strlen('montharchive_by_user_'));
+        return _montharchive_author_block_title_form($requested_type);
+      }    
+      break;
+    case 'save':
+      if (strstr($delta, 'montharchive_by_user_')) {
+        $requested_type = substr($delta, strlen('montharchive_by_user_'));
+        variable_set('montharchive_block_title_by_user_'. $requested_type,$edit[block_title]);
+      }
+      break;
+    case 'list' :
+      $block = array();
+      $nodetypes = node_get_types('names');
+      $block['montharchive_all']['info'] = t('Monthly archives');
+      foreach ($requested_types as $type) {
+        // each array record has a node type name as it's key and value if the node type has a block,
+        // or a value of 0 if it doesn't.
+        if ($type) {          
+          // I have no idea why the inserted string is wrapped in <em> tags...delete the word 'strip_tags' calls if you don't believe me.
+          $block['montharchive_' . $type]['info'] = strip_tags(t('Monthly %type archives', array(
+            '%type' => $nodetypes[$type]
+          )));
+        }
+      }
+      foreach ($requested_types_by_user as $type) {
+        // each array record has a node type name as it's key and value if the node type has a block,
+        // or a value of 0 if it doesn't.
+        if ($type) {
+          $block['montharchive_by_user_' . $type]['info'] = strip_tags(t('Monthly %type by author archives', array(
+            '%type' => $nodetypes[$type]
+          )));
+        }
+      }
+      return $block;
+    case 'view' :
+      // our block content
+      $montharchive_max_block_links = variable_get('montharchive_block_link_max', 12);
+      $montharchive_path = variable_get('montharchive_path', 'archive');
+
+      if ($delta == 'montharchive_all') {
+        $montharchive_include_node_type = variable_get('montharchive_include_node_type', array_keys(node_get_types('names')));
+        $block['subject'] = t('Monthly archives');
+      }
+      else {
+        $requested_type = substr($delta, strlen('montharchive_by_user_'));
+        $montharchive_path = variable_get('montharchive_path_by_user_'. $requested_type, $requested_type);
+        $montharchive_author_path = variable_get('montharchive_author_path', 'author');
+        if ($requested_types_by_user[$requested_type]) {
+          $path_order = variable_get('montharchive_author_path_order', ARCHIVEROOTBEFORETYPE);          
+          $pathkey = $path_order == TYPEBEFOREARCHIVEROOT ? 1 : 0;
+          $userkey = $path_order == TYPEBEFOREARCHIVEROOT ? 2 : 1;
+          if ((arg(0) == 'node') and (is_numeric(arg(1)))) {
+            $node = node_load(arg(1));
+            if(($node->type == $requested_type) and ($node->uid != 0)) {
+              $user = user_load($node->uid);
+              $by_user = TRUE;
+              $title_data->uid = $user->uid;
+              $title_data->user_name = $user->name;
+              $title_data->type = $requested_type;
+              $title_data->type_name = node_get_types('name', $requested_type);
+              $block['subject'] = token_replace(variable_get('montharchive_block_title_by_user_'. $requested_type,'[user_name]\'s [type_name] archives'), 'montharchive_author_block', $title_data);
+              $montharchive_include_node_type = array(
+                $requested_type
+              );
+            }
+          }
+          elseif(
+            (arg($pathkey) == $montharchive_path) and (is_numeric(arg($userkey))) and (arg($userkey) != 0)
+            or 
+            ((arg($pathkey) == $montharchive_author_path) AND (is_string(arg($userkey))))
+            or 
+            ((arg(0) == 'user') and (is_numeric(arg(1))))) {
+            $user = user_load(array('name' => arg($userkey)));
+            if ($user->uid > 0) {      
+              $by_user = TRUE;      
+              $title_data->uid = $user->uid;
+              $title_data->user_name = $user->name;
+              $title_data->type = $requested_type;
+              $title_data->type_name = node_get_types('name', $requested_type);
+              $block['subject'] = token_replace(variable_get('montharchive_block_title_by_user_'. $requested_type,'[user_name]\'s [type_name] archives'), 'montharchive_author_block', $title_data);
+              $montharchive_include_node_type = array(
+                $requested_type
+              );
+            }
+          }
+          elseif(((arg(0) == 'blog') and (is_numeric(arg(1))))) {
+            $user = user_load(arg(1));
+            if ($user->uid > 0) {      
+              $by_user = TRUE;      
+              $title_data->uid = $user->uid;
+              $title_data->user_name = $user->name;
+              $title_data->type = $requested_type;
+              $title_data->type_name = node_get_types('name', $requested_type);
+              $block['subject'] = token_replace(variable_get('montharchive_block_title_by_user_'. $requested_type,'[user_name]\'s [type_name] archives'), 'montharchive_author_block', $title_data);
+              $montharchive_include_node_type = array(
+                $requested_type
+              );
+            }
+          }          
+        }
+        else {
+          $requested_type = substr($delta, strlen('montharchive_'));
+          if ($requested_types[$requested_type]) {
+            $block['subject'] = t('Monthly %type archives', array(
+              '%type' => node_get_types('name', $requested_type)
+            ));
+            $montharchive_include_node_type = array(
+              $requested_type
+            );
+          }
+        }
+      }
+      if (count($montharchive_include_node_type)) {
+        $montharchive_rev_chronsort = variable_get('montharchive_rev_chronsort', 0);
+        if ($by_user) {
+          $query = montharchive_links_by_user_query($montharchive_include_node_type, $user->uid, $montharchive_rev_chronsort);
+        }
+        else {
+          $query = montharchive_links_query($montharchive_include_node_type, $montharchive_rev_chronsort);
+        }        
+        // plus one is the easiest way to find out if you need a "more" link
+        $monthlist = db_query_range(db_rewrite_sql($query, 'n', 'nid'), 0, $montharchive_max_block_links + 1);        
+        
+        $block_content = array();
+        $listed_links = 0;
+        while (($listed_links < $montharchive_max_block_links) && $month = db_fetch_array($monthlist)) {
+          $listed_links += 1;
+          $month['type'] = $requested_type;
+          $month['type_name'] = node_get_types('name', $requested_type);
+          if ($by_user) {
+            $month['user']['uid'] = $user->uid;
+            $month['user']['name'] = $user->name;
+          }
+          $block_content[] = theme('montharchive_link', $month);
+        }
+        
+        if (db_fetch_object($monthlist)) {
+          if (isset($requested_type)) {
+            $node_path = variable_get('montharchive_' . $requested_type . '_path', $month['type']);
+            if ($by_user) {
+              $path = $path_order == TYPEBEFOREARCHIVEROOT ? $node_path . "/author_{$montharchive_path}" : "author_{$montharchive_path}/" . $node_path;
+            }
+            else {
+              $path = $path_order == TYPEBEFOREARCHIVEROOT ? $node_path . "{$montharchive_path}" : "{$montharchive_path}/" . $node_path;
+            }
+          } else {
+            $path = $montharchive_path;
+          }
+          $morelink = l(t('more...'), $path);
+        }
+        if (count($block_content)) {
+          $block['content'] = theme('item_list', $block_content) . $morelink;
+          return $block;
+        }
+      }
+    break;
+  }
+}
+
+function montharchive_form_block_admin_configure_alter(&$form, &$form_state) {
+  if($form['module']['#value'] == 'montharchive') {
+    $form['block_settings']['title']['#type'] = 'value';
+    $form['block_settings']['title']['#value'] = '';
+  }
+}
+
+/**
+ * hook_help() implementation
+ *
+ * TODO: better help
+ *
+ */
+function montharchive_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#montharchive' :
+      return t('');
+    break;
+    case 'admin/modules#montharchive' :
+      return t('Creates archives site wide and by node type.');
+    break;
+    default :
+      return '';
+  }
+}
+
+/**
+ * Generate a page listing links to all the archives that can be generated
+ *
+ * @param $include_node_types array of strings
+ * @return string
+ */
+function montharchive_link_page($include_node_types = NULL) {
+  if (is_string($include_node_types)) {
+    $montharchive_include_node_type = array(
+      $include_node_types
+    );
+  }
+  else {
+    $montharchive_include_node_type = variable_get('montharchive_include_node_type', array_keys(node_get_types('names')));
+  }
+  $query = montharchive_links_query($montharchive_include_node_type, variable_get('montharchive_rev_linksort', 1));
+  $monthlist = db_query(db_rewrite_sql($query, 'n', 'nid'));
+  $block_content = array();
+  $listed_links = 0;
+  while ($month = db_fetch_array($monthlist)) {
+    $listed_links += 1;
+    $block_content[] = theme('montharchive_link', $month);
+  }
+  // TODO: needs a montharchive_link_page_title variable series  
+  if (is_string($include_node_types)) {
+    $link_data['type'] = $include_node_types;
+    $link_data['type_name'] = node_get_types('name', $include_node_types);
+    $page_title = 'Monthly [type_name] archive links';
+  }
+  else {
+    $page_title = 'Monthly archive links';
+  }
+  
+  drupal_set_title(token_replace($page_title, 'montharchive', (object) $link_data));
+  
+  return theme('item_list', $block_content);
+}
+
+/**
+ * Generate a page listing links to all the author archives that can be generated
+ * 
+ * @param $user - user record
+ * @param $include_node_types - array of strings
+ * @return string
+ */
+function montharchive_link_by_user_page($user, $include_node_types) {
+  if (is_string($include_node_types)) {
+    $montharchive_include_node_type = array(
+      $include_node_types
+    );
+  }
+  $query = montharchive_links_by_user_query($montharchive_include_node_type, $user->uid, variable_get('montharchive_rev_linksort', 1));
+  $monthlist = db_query(db_rewrite_sql($query, 'n', 'nid'));
+  $block_content = array();
+  $listed_links = 0;
+  while ($month = db_fetch_array($monthlist)) {
+    $listed_links += 1;
+    $block_content[] = theme('montharchive_link', $month);
+  }
+  // TODO: needs a montharchive_link_by_user_page_title variable series  
+  if (is_string($include_node_types)) {
+    $link_data['type'] = $include_node_types;
+    $link_data['type_name'] = node_get_types('name', $include_node_types);
+    $page_title = 'Monthly [type_name] archive links';
+  }
+  else {
+    $page_title = 'Monthly archive links';
+  }
+  
+  drupal_set_title(token_replace($page_title, 'montharchive', (object) $link_data));
+  
+  return theme('item_list', $block_content);
+}
+
+/**
+ * Create SQL for links query
+ *
+ * @param array $node_types
+ * @param $montharchive_rev_linksort - boolean
+ * @return string
+ */
+function montharchive_links_query($node_types, $montharchive_rev_linksort) {
+  foreach ($node_types as $key => $value) {
+    $node_types[$key] = "'" . db_escape_string($value) . "'";
+  }
+//  $montharchive_rev_linksort = variable_get('montharchive_rev_linksort', 1);
+  $query = '
+  	SELECT CONCAT(DATE_FORMAT(FROM_UNIXTIME(created),\'%Y\'),DATE_FORMAT(FROM_UNIXTIME(created),\'%m\')) AS yearmonth,
+    COUNT(CONCAT(DATE_FORMAT(FROM_UNIXTIME(created),\'%Y\'),DATE_FORMAT(FROM_UNIXTIME(created),\'%m\'))) AS postcount,
+    DATE_FORMAT(FROM_UNIXTIME(created),\'%Y\') AS year,
+    DATE_FORMAT(FROM_UNIXTIME(created),\'%m\') AS monthno,
+    DATE_FORMAT(FROM_UNIXTIME(created),\'%%b\') AS mon,
+    DATE_FORMAT(FROM_UNIXTIME(created),\'%M\') AS month
+    FROM {node} n ';
+  $query .= 'WHERE n.type IN (' . implode(',', $node_types) . ') ';
+  $query .= ' AND status = 1 ';
+  $query .= ' GROUP BY yearmonth ORDER BY yearmonth';
+  $query .= $montharchive_rev_linksort ? ' ASC' : ' DESC ';
+  return $query;
+}
+
+/**
+ * Create SQL for links query
+ * 
+ * @param $node_types - array of strings
+ * @param $uid - integer
+ * @param $montharchive_rev_linksort - boolean
+ * @return string
+ */
+function montharchive_links_by_user_query($node_types, $uid, $montharchive_rev_linksort) {
+  if ($uid > 0) {
+    foreach ($node_types as $key => $value) {
+      $node_types[$key] = "'" . db_escape_string($value) . "'";
+    }
+    $query = '
+    	SELECT CONCAT(DATE_FORMAT(FROM_UNIXTIME(created),\'%Y\'),DATE_FORMAT(FROM_UNIXTIME(created),\'%m\')) AS yearmonth,
+      COUNT(CONCAT(DATE_FORMAT(FROM_UNIXTIME(created),\'%Y\'),DATE_FORMAT(FROM_UNIXTIME(created),\'%m\'))) AS postcount,
+      DATE_FORMAT(FROM_UNIXTIME(created),\'%Y\') AS year,
+      DATE_FORMAT(FROM_UNIXTIME(created),\'%m\') AS monthno,
+      DATE_FORMAT(FROM_UNIXTIME(created),\'%%b\') AS mon,
+      DATE_FORMAT(FROM_UNIXTIME(created),\'%M\') AS month
+      FROM {node} n ';
+    $query .= 'WHERE n.type IN (' . implode(',', $node_types) . ') ';
+    $query .= ' AND n.status = 1 ';
+    $query .= ' AND n.uid = ' . $uid;
+    $query .= ' GROUP BY yearmonth ORDER BY yearmonth';
+    $query .= $montharchive_rev_linksort ? ' ASC' : ' DESC ';
+    return $query;
+  }
+}
+
+/**
+ * hook_menu() implementation
+ *
+ */
+function montharchive_menu() {
+  $archive_types = array_flip(variable_get('montharchive_block_node_type', array()));
+  $archive_types['all'] = NULL;
+  unset($archive_types[0]);
+  $archive_root = variable_get('montharchive_path', 'archive');
+  $path_order = variable_get('montharchive_path_order', ARCHIVEROOTBEFORETYPE);
+  foreach ($archive_types as $archive_type) {
+    $node_path = variable_get('montharchive_' . $archive_type . '_path', $archive_type);
+    $archive_index = $archive_type ? ($path_order == TYPEBEFOREARCHIVEROOT ? $node_path . '/' . $archive_root : $archive_root . '/' . $node_path) : $archive_root;
+    $items[$archive_index] = array(
+      'title' => $archive_type ? "Monthly $archive_type archives links" : 'Monthly archives links', 
+      'page callback' => 'montharchive_link_page', 
+      'page arguments' => $archive_type ? array(
+        $archive_type
+      ) : array(), 
+      'type' => MENU_CALLBACK, 
+      'access callback' => 'montharchive_access_page', 
+      'access arguments' => array(
+        $archive_type
+      )
+    );
+    $items[$archive_index . '/%/%'] = array(
+      'title' => $archive_type ? variable_get('montharchive_' . $archive_type . '_title', $archive_type) : variable_get('montharchive_title', 'Monthly archive [month] [yyyy]'), 
+      'page callback' => 'montharchive_post_page', 
+      'page arguments' => $archive_type ? array(
+        2, 
+        3, 
+        $archive_type
+      ) : array(
+        1, 
+        2
+      ), 
+      'type' => MENU_CALLBACK, 
+      'access callback' => 'montharchive_access_page', 
+      'access arguments' => array(
+        $archive_type
+      )
+    );
+  }
+
+  $archive_types = array_flip(variable_get('montharchive_block_node_type_by_user', array()));
+  unset($archive_types[0]);
+  $author_root = variable_get('montharchive_author_path', 'author');
+  
+  $author_path_order = variable_get('montharchive_author_path_order', ARCHIVEROOTBEFORETYPE);
+  foreach ($archive_types as $archive_type) {
+    $author_node_path = variable_get('montharchive_path_by_user' . $archive_type, $archive_type);
+    $author_index = $author_path_order == TYPEBEFOREARCHIVEROOT ? 
+    $author_node_path ."/{$author_root}/%montharchive_author" : "{$author_root}/%montharchive_author/". $author_node_path;
+    
+    $items[$author_index] = array(
+      'title' => $archive_type ? "Monthly $archive_type archives links by user" : 'Monthly archives links', 
+      'page callback' => 'montharchive_link_by_user_page', 
+      'page arguments' => array(
+        2, $archive_type,
+      ), 
+      'type' => MENU_CALLBACK, 
+      'access callback' => 'montharchive_access_page', 
+      'access arguments' => array(
+        $archive_type
+      )
+    );
+    $items[$author_index . '/%/%'] = array(
+      'title' => $archive_type ? variable_get('montharchive_' . $archive_type . '_title', $archive_type) : variable_get('montharchive_title', 'Monthly archive [month] [yyyy]'), 
+      'page callback' => 'montharchive_post_by_user_page', 
+      'page arguments' => $author_path_order == TYPEBEFOREARCHIVEROOT ? array(
+        2,
+        3, 
+        4,
+        $archive_type
+      ) : array(
+        1,
+        3, 
+        4,
+        $archive_type
+      ), 
+      'type' => MENU_CALLBACK, 
+      'access callback' => 'montharchive_access_page', 
+      'access arguments' => array(
+        $archive_type
+      )
+    );
+  }
+  
+  $items['admin/settings/montharchive'] = array(
+    'title' => t('Monthly archive settings'), 
+    'page callback' => 'drupal_get_form', 
+    'page arguments' => array(
+      'montharchive_settings_form'
+    ), 
+    'type' => MENU_NORMAL_ITEM, 
+    'access arguments' => array(
+      'access administration pages'
+    ),
+    'file' => 'montharchive.settings.inc',
+  );
+  $items['admin/settings/montharchive/'] = array(
+    'title' => t('Monthly archive settings'), 
+    'description' => 'Configure node types for which blocks will be generated.', 
+    'page callback' => 'drupal_get_form', 
+    'page arguments' => array(
+      'montharchive_settings_form'
+    ), 
+    'type' => MENU_DEFAULT_LOCAL_TASK, 
+    'access arguments' => array(
+      'access administration pages'
+    ), 
+    'weight' => 5,
+    'file' => 'montharchive.settings.inc',
+  );
+  $items['admin/settings/montharchive/type_path'] = array(
+    
+    'title' => t('Links and titles'), 
+    'description' => 'Configure path names for node types for which blocks will be generated and date format of the link text.', 
+    'page callback' => 'drupal_get_form', 
+    'page arguments' => array(
+      'montharchive_settings_type_path_form'
+    ), 
+    'type' => MENU_LOCAL_TASK, 
+    'access arguments' => array(
+      'access administration pages'
+    ), 
+    'file' => 'montharchive.settings.inc',
+    'weight' => 10
+  );
+  return $items;
+}
+
+/**
+ * Builds the archive displays
+ *
+ * @param string $year (2 or 4 digits)
+ * @param string $month (zero-filled 2 digits)
+ * @param string $include_node_types
+ * @return string
+ */
+function montharchive_post_page($year, $monthno, $include_node_types = NULL) {
+  if (is_numeric($year) and is_numeric($monthno)) {
+    $default_nodes_main = variable_get('default_nodes_main', 20);
+    $montharchive_paginate = variable_get('montharchive_paginate', 1);
+    $montharchive_include_node_types = is_string($include_node_types) ? array(
+      $include_node_types
+    ) : array_keys(variable_get('montharchive_include_node_type', node_get_types('names')));
+    
+    $node_query_str = montharchive_post_query($montharchive_include_node_types, $year, $monthno);
+    //    $node_query_str = db_rewrite_sql(montharchive_post_query($montharchive_include_node_types, $year, $month), 'n', 'node');
+    $node_query = $montharchive_paginate ? pager_query($node_query_str, $default_nodes_main, 0) : db_query($node_query_str);
+    while ($nid = db_fetch_array($node_query)) {
+      $node = node_load($nid['nid']);
+      $page .= node_view($node, 1);
+    }
+    if ($montharchive_paginate) {
+      $page .= theme('pager', NULL, $default_nodes_main, 0);
+    }
+    
+    // maybe replace these to remove dependency on date_api module?
+    // maybe make it conditional?
+    $month_names = date_month_names(1);
+    $month_names_abbr = date_month_names_abbr(1);
+    
+    $link_data->monthno = $monthno;
+    $link_data->year = $year;
+    $link_data->month = $month_names[(integer) $monthno];
+    $link_data->mon = $month_names_abbr[(integer) $monthno];
+    if (is_string($include_node_types)) {
+      $link_data->type = $include_node_types;
+      $link_data->type_name = node_get_types('name', $include_node_types);
+      $page_title = variable_get('montharchive_' . $include_node_types . '_title', '[type_name] [month] [yyyy]');
+    }
+    else {
+      $page_title = variable_get('montharchive_title', '[month] [yyyy]');
+    }
+    
+    drupal_set_title(token_replace($page_title, 'montharchive', $link_data));
+  }
+  return $page ? $page : '';
+}
+
+/**
+ * Builds the archive displays
+ * 
+ * @param $user - user record
+ * @param string $year (2 or 4 digits)
+ * @param string $month (zero-filled 2 digits)
+ * @param string $include_node_types
+ * @return string
+ */
+function montharchive_post_by_user_page($user, $year, $monthno, $include_node_types) {
+  if (is_numeric($year) and is_numeric($monthno)) {
+    $default_nodes_main = variable_get('default_nodes_main', 20);
+    $montharchive_paginate = variable_get('montharchive_paginate', 1);
+    $montharchive_include_node_types = is_string($include_node_types) ? array(
+      $include_node_types
+    ) : array_keys(variable_get('montharchive_include_node_type', node_get_types('names')));
+    
+    $node_query_str = montharchive_post_by_user_query($user, $montharchive_include_node_types, $year, $monthno);
+    
+    $node_query = $montharchive_paginate ? pager_query($node_query_str, $default_nodes_main, 0) : db_query($node_query_str);
+    while ($nid = db_fetch_array($node_query)) {
+      $node = node_load($nid['nid']);
+      $page .= node_view($node, 1);
+    }
+    if ($montharchive_paginate) {
+      $page .= theme('pager', NULL, $default_nodes_main, 0);
+    }
+    
+    $month_names = date_month_names(1);
+    $month_names_abbr = date_month_names_abbr(1);
+        
+    $link_data->monthno = $monthno;
+    $link_data->year = $year;
+    $link_data->month = $month_names[(integer) $monthno];
+    $link_data->mon = $month_names_abbr[(integer) $monthno];
+
+    $link_data->type = $include_node_types;
+    $link_data->type_name = node_get_types('name', $include_node_types);
+    $page_title = variable_get('montharchive_title_by_user_' . $include_node_types, '[user]\'s [type_name] archive [month] [yyyy]');
+    drupal_set_title(token_replace_multiple($page_title, array('user' => $user, 'montharchive' => $link_data)));
+  }
+  return $page ? $page : '';
+}
+
+/**
+ * Creates SQL for the archive queries
+ *
+ * @param array $node_types
+ * @param string $year (2 or 4 digits)
+ * @param string $month (zero-filled 2 digits)
+ * @return string
+ */
+function montharchive_post_query($node_types, $year, $month) {
+  foreach ($node_types as $key => $value) {
+    $node_types[$key] = "'" . db_escape_string($value) . "'";
+  }
+  $montharchive_rev_pagesort = variable_get('montharchive_rev_pagesort', 1);
+  $nextmonth = sprintf('%02d', $month + 1);
+  $query = "SELECT n.nid FROM {node} n
+    WHERE FROM_UNIXTIME(n.created) >= '{$year}-{$month}'
+    AND FROM_UNIXTIME(n.created) < '{$year}-{$nextmonth}'";
+  $query .= ' AND n.type IN (' . implode(',', $node_types) . ') ';
+  $query .= ' AND status = 1 ';
+  $query .= ' ORDER BY n.created';
+  $query .= $montharchive_rev_pagesort ? '' : ' DESC ';
+  return $query;
+}
+
+/**
+ * Creates SQL for the archive queries
+ *  
+ * @param $user - user record
+ * @param array $node_types
+ * @param string $year (2 or 4 digits)
+ * @param string $month (zero-filled 2 digits)
+ * @return string
+ */
+function montharchive_post_by_user_query($user, $node_types, $year, $month) {
+  foreach ($node_types as $key => $value) {
+    $node_types[$key] = "'" . db_escape_string($value) . "'";
+  }
+  $montharchive_rev_pagesort = variable_get('montharchive_rev_pagesort', 1);
+  $nextmonth = sprintf('%02d', $month + 1);
+  $query = "SELECT n.nid FROM {node} n
+    WHERE FROM_UNIXTIME(n.created) >= '{$year}-{$month}'
+    AND FROM_UNIXTIME(n.created) < '{$year}-{$nextmonth}'";
+  $query .= ' AND n.type IN (' . implode(',', $node_types) . ') ';
+  $query .= " AND n.uid = $user->uid ";
+  $query .= ' AND n.status = 1 ';
+  $query .= ' ORDER BY n.created';
+  $query .= $montharchive_rev_pagesort ? '' : ' DESC ';
+  return $query;
+}
+
+/**
+ * hook_theme() implementation
+ *
+ * @return array
+ */
+function montharchive_theme($existing, $type, $theme, $path) {
+  return array(
+    'montharchive_link' => array(
+      'arguments' => array(
+        'link_data' => NULL
+      )
+    )
+  );
+}
+
+/**
+ * hook_token_list() implementation
+ *
+ * @param string $type
+ * @return array
+ */
+function montharchive_token_list($type = 'all') {
+  if ($type == 'montharchive') {
+    $tokens = array();
+    $tokens['montharchive']['month'] = t('Long month name (January, February...December)');
+    $tokens['montharchive']['mon'] = t('Short month name (Jan, Feb...Dec)');
+    $tokens['montharchive']['mm'] = t('Two digit month (01, 02...12)');
+    $tokens['montharchive']['m'] = t('Variable digit month (1, 2...12');
+    $tokens['montharchive']['yyyy'] = t('Four digit year');
+    $tokens['montharchive']['yy'] = t('Two digit year');
+    $tokens['montharchive']['type'] = t('Machine readable type name');
+    $tokens['montharchive']['type_name'] = t('Displayable type label');
+    return $tokens;
+  }
+  elseif ($type == 'montharchive_author_block') {
+    $tokens = array();
+    $tokens['montharchive']['uid'] = t('User\'s name');
+    $tokens['montharchive']['user_name'] = t('User\' id');
+    $tokens['montharchive']['type'] = t('Machine readable type name');
+    $tokens['montharchive']['type_name'] = t('Displayable type label');
+    return $tokens;
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * hook_token_values() implementation
+ *
+ * @param string $type
+ * @param object $object
+ * @return unknown
+ */
+function montharchive_token_values($type, $object = NULL) {
+  if ($type == 'montharchive') {
+    $link_data = $object;
+    $token['type'] = $link_data->type;
+    $token['type_name'] = $link_data->type_name;
+    $token['month'] = $link_data->month;
+    $token['mon'] = $link_data->mon;
+    $token['mm'] = $link_data->monthno;
+    $token['m'] = (integer) $link_data->monthno;
+    $token['yyyy'] = $link_data->year;
+    $token['yy'] = substr($link_data->year, -2);
+    return $token;
+  }
+  elseif ($type == 'montharchive_author_block') {
+    $link_data = $object;
+    $token['uid'] = $link_data->uid;
+    $token['user_name'] = $link_data->user_name;
+    $token['type'] = $link_data->type;
+    $token['type_name'] = $link_data->type_name;
+    return $token;
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * Format post count for block
+ *
+ * @param array $link_data
+ * @return string
+ */
+function _montharchive_linkcount($link_data) {
+  return variable_get('montharchive_show_linkcount', 1) ? " ({$link_data['postcount']})" : '';
+}
+
+/**
+ * Format link text for block
+ *
+ * @param array $link_data
+ * @return string
+ */
+function _montharchive_linktext($link_data) {
+  return token_replace(variable_get('montharchive_link_text', '[month] [yyyy]'), 'montharchive', (object) $link_data);
+}
+
+/**
+ * Format url to archive for block
+ *
+ * @param array $link_data
+ * @return string
+ */
+function _montharchive_linkpath($link_data, $montharchive_path) {
+  if (isset($link_data['user']['uid'])) {
+    $path_order = variable_get('montharchive_author_path_order', ARCHIVEROOTBEFORETYPE);
+    $node_path = variable_get('montharchive_author_path' . $link_data['type'], $link_data['type']);
+    $user_path = variable_get('montharchive_author_uid_or_name', 'uid') == 'uid' ? $link_data['user']['uid'] : str_replace(' ', '-', $link_data['user']['name']);
+//    drupal_set_message(variable_get('montharchive_author_uid_or_name', 'uid'));
+    $path = $link_data['type'] ? 
+      ($path_order == TYPEBEFOREARCHIVEROOT ? 
+      $node_path ."/{$montharchive_path}/{$user_path}"  : "{$montharchive_path}/{$user_path}/" . $node_path) 
+      : $montharchive_path;
+  }
+  else {
+    $path_order = variable_get('montharchive_path_order', ARCHIVEROOTBEFORETYPE);
+    $node_path = variable_get('montharchive_' . $link_data['type'] . '_path', $link_data['type']);
+    $path = $link_data['type'] ? 
+      ($path_order == TYPEBEFOREARCHIVEROOT ? $node_path . '/' . $montharchive_path : $montharchive_path . '/' . $node_path) 
+      : $montharchive_path;
+  }
+   
+  return $path . "/{$link_data['year']}/{$link_data['monthno']}";
+}
+
+/**
+ * Theme function for links to archives
+ *
+ * @param array $link_data
+ * The indexes are:
+ * 		year - four digit year
+ * 		monthno - 01..12
+ * 		mon - short month name
+ * 		month - long month name
+ * 		postcount - number of post
+ *
+ * @return string
+ */
+function theme_montharchive_link($link_data) {
+  if (isset($link_data['user']['uid'])) {
+    $montharchive_path = variable_get('montharchive_author_path', 'author');
+  }
+  else {
+    $montharchive_path = variable_get('montharchive_path', 'archive');
+  }
+  $link_count = _montharchive_linkcount($link_data);
+  $link_path = _montharchive_linkpath($link_data, $montharchive_path);
+  return l(_montharchive_linktext($link_data) . $link_count, $link_path);
+}

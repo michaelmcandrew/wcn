@@ -1,0 +1,159 @@
+<?php // $Id: relatedcontent.install,v 1.3.2.6.2.1 2009/06/07 13:28:46 peterboeren Exp $
+
+/* relatedcontent.install,v 1.3.2.6 2008/01/28 18:58:25 tbarregren Exp $
+ *
+ * Copyright (C) 2007-2008 Thomas Barregren.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
+
+/**
+ * @file
+ * Installer script for the RelatedContent – a Drupal module that allows
+ * privileged users to add "related content" to the beginning or end of any
+ * node.
+ *
+ * Author:
+ *   Thomas Barregren <http://drupal.org/user/16678>.
+ *
+ * Ported to drupal 6.x by Peter Boeren
+ */
+
+/**
+ *  Implementation of hook_schema
+ *
+ * @return array
+ */
+function relatedcontent_schema() {
+  $schema['relatedcontent'] = array(
+    'description' => t('The base table for related content.'),
+    'fields' => array(
+      'nid' => array(
+        'description' => t('The node that has related content.'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not NULL' => TRUE),
+      'vid' => array(
+        'description' => t('The current view identifier.'),
+        'type' => 'varchar',
+        'length' => 32,
+        'not NULL' => TRUE,
+        'default' => ''),
+      'include_nid' => array(
+        'description' => t('The nid of the node that is included.'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not NULL' => TRUE,
+        'default' => 0),
+      'ordinal_number' => array(
+        'description' => t('The ordinal number.'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not NULL' => TRUE,
+        'default' => 0),
+      ),
+    'primary key' => array('nid', 'vid', 'include_nid'),
+  );
+
+  $schema['relatedcontent_view'] = array(
+    'description' => t('The base table for nodes.'),
+    'fields' => array(
+      'type' => array(
+        'description' => t('The node type.'),
+        'type' => 'varchar',
+        'length' => 32,
+        'not NULL' => TRUE,
+        'default' => ''),
+      'vid' => array(
+        'description' => t('The view identifier.'),
+        'type' => 'varchar',
+        'length' => 32,
+        'not NULL' => TRUE,
+        'default' => ''),
+      'title' => array(
+        'description' => t('The title of the view.'),
+        'type' => 'varchar',
+        'length' => 128,
+        'not NULL' => TRUE,
+        'default' => ''),
+      'weight' => array(
+        'description' => t('The weight of the view.'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not NULL' => TRUE),
+       'enabled' => array(
+        'description' => t('Flag to enable or disable.'),
+        'type' => 'int',
+        'size' => 'small',
+        'unsigned' => TRUE,
+        'not NULL' => TRUE),
+      ),
+    'primary key' => array('type', 'vid'),
+  );
+
+  return $schema;
+}
+
+
+function relatedcontent_install() {
+  drupal_install_schema('relatedcontent');
+  $result = db_result(db_query("SELECT weight FROM {system} WHERE name = 'views'"));
+  db_query("UPDATE {system} SET weight = %d WHERE name = 'relatedcontent'", ($result+1));
+}
+
+function relatedcontent_uninstall() {
+  _relatedcontent_install_variable_delete_all();
+  drupal_uninstall_schema('relatedcontent');
+}
+
+/**
+ * Set the persisted variable $variable to the value of $value.
+ */
+function _relatedcontent_install_variable_set($variable, $value) {
+  variable_set($variable, $value);
+  $msg = t('variable_set(!variable, !value)', array('!variable' => "'$variable'", '!value' => is_string($value) ? "'$value'" : $value));
+  return array('success' => TRUE, 'query' => $msg);
+}
+
+/**
+ * Delete the persisted variable $variable.
+ */
+function _relatedcontent_install_variable_del($variable) {
+  variable_del($variable);
+  $msg = t('variable_delete(!variable)', array('!variable' => "'$variable'"));
+  return array('success' => TRUE, 'query' => $msg);
+}
+
+/**
+ * Delete all persisted variables that beginns with $prefix.
+ */
+function _relatedcontent_install_variable_delete_all() {
+  global $conf;
+  $prefix = _relatedcontent_install_module_name() .'_%';
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE '%s'", $prefix);
+  while ($row = db_fetch_array($result)) {
+    unset($conf[$row['name']]);
+  }
+  $result = $result && db_query("DELETE FROM {variable} WHERE name LIKE '%s'", $prefix);
+  cache_clear_all('variables', 'cache');
+}
+
+/**
+ * Returns the name of this module.
+ */
+function _relatedcontent_install_module_name() {
+  return drupal_substr(__FUNCTION__, 1, strpos(__FUNCTION__, '_', 1) - 1);
+}

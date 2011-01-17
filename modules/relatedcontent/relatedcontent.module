@@ -1,0 +1,1468 @@
+<?php // $Id: relatedcontent.module,v 1.16.2.13.2.5 2009/12/09 12:45:19 peterboeren Exp $
+
+/* relatedcontent.module,v 1.16.2.13 2008/09/22 06:21:40 tbarregren Exp $
+*
+* Copyright (C) 2007-2008 Thomas Barregren.
+*
+* This program is free software; you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation; either version 2 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License along
+* with this program; if not, write to the Free Software Foundation, Inc.,
+* 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+*/
+
+
+/**
+ * @file
+ * RelatedContent – a Drupal module that Allows privileged users to associate
+ * a node with related nodes that can be displayed along with the node.
+ *
+ * Author:
+ *   Thomas Barregren <http://drupal.org/user/16678>.
+ *
+ * Ported to drupal 6.x by Peter Boeren
+ *
+ * Sponsors:
+ *   Spoon Media <http://www.spoon.com.au/>,
+ *   GMCVO <http://www.gmcvo.org.uk/>, and
+ *   Webbredaktören <http://www.webbredaktoren.se/>.
+ */
+
+
+/*****************************************************************************
+* RELATEDCONTENT API THAT CAN BE USED BY THEMES AND OTHER MODULES
+****************************************************************************/
+
+/**
+ * Gets the id numbers (nid) of nodes that are related to $node.
+ *
+ * @param $node
+ *   is the node object, as loaded through node_load(), for which the related
+ *   content is requested.
+ * @return
+ *   an array of id numbers (nid) of nodes that are related to $node. The array
+ *   is sorted as described in the documentation of the module.
+ */
+function relatedcontent_get_nodes(&$node) {
+  $nodes = $node->nodes; // Keeps $node immutable.
+  if (is_array($nodes)) {
+    foreach ($nodes as $viewkey => $node_values) {
+      foreach ($node_values as $nid => $ordinal) {
+        $node_array[] = $nid;
+      }
+    }
+  }
+  asort($node_array, SORT_NUMERIC);
+  return $node_array;
+}
+
+/**
+ * Sets the id numbers (nid) of nodes that are related to $node.
+ *
+ * @param $node
+ *   is the node object, as loaded through node_load(), for which the related
+ *   content is to be set.
+ * @param $nodes
+ *   is an array of id numbers (nid) of nodes that are related to $node. The
+ *   array should be sorted as described in the documentation of the module.
+ */
+function relatedcontent_set_nodes(&$node, $vid, $nodes) {
+  $ordinal = -count($nodes);
+  foreach ($nodes as $nid) {
+    $node_nodes[$nid] = $ordinal++;
+  }
+  $node->nodes = $node_nodes;
+  _relatedcontent_db_insert($node->nid, $vid, $node->nodes);
+}
+
+/**
+ * Loads, transform and group the related content of a given node.
+ *
+ * This function takes either a node id or a node object ($node); load those
+ * nodes that contains its related content; transform them by passing them
+ * through a callback function ($content_function), which may take additional
+ * arguments ($content_function_args); and finally group ($output_grouped).
+ *
+ * Example 1: After executing
+ *
+ *   $node = 3;
+ *   $output = relatedcontent($node);
+ *
+ * $output['all'] is an array of all node objects, as loaded through
+ * node_load(), with related content or the node with the id (3) in $node.
+ *
+ * Example 2: After executing
+ *
+ *   $node = node_load(7);
+ *   $output = relatedcontent($node, 'type', 'node_view', array(TRUE));
+ *
+ * $output[$type][], where $type is the name of an content type, is an array of
+ * teasers, as provided by node_view(), with related content for the node
+ * with the node object in $node.
+ *
+ * Example 3: Following code print the full bodies of nodes with related
+ * content of the node with id 205. The output is grouped by the authors. Each
+ * group is preceded with a heading stating the author's name.
+ *
+ *   $output = relatedcontent(205, 'name', 'node_view', array(FALSE));
+ *   foreach ($output as $group => $contents) {
+ *     $author = $group ? $group : t('Anonymous');
+ *     echo "<h3>$author</h3>";
+ *     echo implode('', $contents);
+ *   }
+ *
+ * @param $node
+ *   is either the id of a node (nid) or a node object as loaded by node_load().
+ * @param $output_grouped
+ *   is the name of the node field by which the content should be grouped, e.g.
+ *   'type', 'name', 'uid' and 'status', or FALSE if the output should not be
+ *   grouped.
+ * @param $content_function
+ *   is a callback function that transforms a node object, passed in as its
+ *   first argument, to the desired representation, e.g. the teaser or body.
+ *   If omitted or empty, the default transform is just returning the node
+ *   object itself. If omitted or empty, grouping s not performed.
+ * @param $content_function_args
+ *   is an optional array with values that are passed in as argument 2, 3, and
+ *   so forth, when calling the callback function $content_function.
+ * @return
+ *   An array whose keys are the names by which the output should be grouped,
+ *   i.e. names of content types or authors, or 'all', depending on
+ *   $output_grouped, and whose values are arrays with the return values of
+ *   calling $content_function for the nodes with related content.
+ */
+function relatedcontent($node, $output_grouped = FALSE, $content_function = NULL, $content_function_args = NULL) {
+
+  // Load the node if only the node id was given.
+  if (is_numeric($node)) {
+    $node = node_load($node);
+  }
+
+  // Abort if the node lacks related content, or RelatedContent is disabled for
+  // the node's content type.
+  if (!$node->nodes || !relatedcontent_variable_enabled($node->type)) return;
+
+  // Handle missing arguments.
+  if (!$content_function) {
+    $content_function = create_function('$n', 'return $n;');
+  }
+  if (!isset($content_function_args)) {
+    $content_function_args = array();
+  }
+
+  // Get the job done.
+  return _relatedcontent($node, $output_grouped, $content_function, $content_function_args);
+
+}
+
+/*****************************************************************************
+* HOOKS
+****************************************************************************/
+
+
+/**
+ * Implementation of hook_menu().
+ */
+function relatedcontent_menu() {
+  $items = array();
+
+  $items['node/%_relatedcontent_localtask/relatedcontent'] = array(
+  'title' => 'RelatedContent',
+  'page callback' => 'drupal_get_form',
+  'page arguments' => array('_relatedcontent_form', 1),
+  'access arguments' => array('access related content'),
+  'load arguments' => array($view->vid),
+  'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['node/%_relatedcontent_localtask/relatedcontent/list'] = array(
+  'type' => MENU_DEFAULT_LOCAL_TASK,
+  'title' => 'Overview',
+  'page callback' => 'drupal_get_form',
+  'page arguments' => array('_relatedcontent_form', 1),
+  'access arguments' => array('access related content'),
+  'weight' => -10,
+  );
+
+  // local task from the views
+  _relatedcontent_menu_relatedcontent($items);
+
+  return $items;
+}
+
+
+/**
+ * Implementation of hook_perm().
+ */
+function relatedcontent_perm() {
+  return array('access related content');
+}
+
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function relatedcontent_form_alter(&$form, $form_state, $form_id) {
+  if ($form_id == 'node_type_form' && isset($form['identity']['#type'])) {
+    _relatedcontent_form_alter_node_type($form);
+  }
+}
+
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function relatedcontent_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  $function = "_relatedcontent_node_$op";
+  
+  if (relatedcontent_variable_enabled($node->type)) {
+    if (function_exists($function)) {
+      return $function($node, $a3, $a4);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_help().
+ */
+function relatedcontent_help($path='admin/help#relatedcontent', $arg) {
+  switch ($path) {
+    case 'admin/help#relatedcontent':
+      return _relatedcontent_help_help();
+  }
+}
+
+
+/**
+ * Implementation of hook_theme().
+ */
+function relatedcontent_theme($existing, $type, $theme, $path) {
+  return array(
+  'relatedcontent' => array(
+  'arguments' => array('output' => NULL, 'grouped' => NULL, 'node_type' => NULL, 'teaser' => NULL, 'page' => NULL),
+  'file' => 'relatedcontent.theme.inc'
+  ),
+  'relatedcontent_form_alter_node_type_views' => array(
+  'arguments' => array('form' => NULL),
+  'file' => 'relatedcontent.theme.inc'
+  ),
+  'relatedcontent_form' => array(
+  'arguments' => array('form' => NULL),
+  'file' => 'relatedcontent.theme.inc'
+  ),
+  );
+}
+
+/**
+ * implementation of hook_block().
+ */
+function relatedcontent_block($op = 'list', $delta = 0, $edit = array()) {
+  if ($op == 'list') {
+    $blocks[0] = array('info' => t('Related content'));
+    return $blocks;
+  }
+  else if ($op == 'view') {
+    switch ($delta) {
+      case 0:
+        $block = array('subject' => t('Related content'),
+        'content' => _related_content_block());
+        break;
+    }
+    return $block;
+  }
+}
+
+/*****************************************************************************
+* IMPLEMENTATION OF THE MENU HOOK
+****************************************************************************/
+
+/**
+ * If viewing a node of a type for which RelatedContent is enabled,
+ * provide paths and tabs for adding and removing related content of the
+ * node.
+ */
+function _relatedcontent_menu_relatedcontent(&$items) {
+
+  // Add the secondary tab listing all nodes provided by the view.
+  if ($views = _relatedcontent_db_enabled_views()) {
+    foreach ($views as $view) {
+      $items['node/%_relatedcontent_localtask/relatedcontent/'. $view->vid] = array(
+      'type' => MENU_LOCAL_TASK,
+      'title' => $view->title ? $view->title : relatedcontent_view_title($view->vid, $type),
+      'load arguments' => array($view->vid),
+      'description' => $view->description,
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('_relatedcontent_form_view', 1, $view->vid),
+      'access arguments' => array('access related content'),
+      );
+    }
+  }
+}
+
+
+/**
+ * implementation of a menu loaders and wildcards to determine
+ * if a localtask has to be shown on this nodetype
+ *
+ * @param unknown_type $nid
+ */
+function _relatedcontent_localtask_load($nid, $vid = NULL) {
+
+  if (is_numeric($nid)) {
+    $type = db_result(_relatedcontent_db_query('_relatedcontent_db_content_type', $nid));
+
+    if (!relatedcontent_variable_enabled($type)) {
+      return FALSE;
+    }
+
+    $views_per_type_query = _relatedcontent_db_query('_relatedcontent_db_get_enabled_views_for_type', $type, 1);
+
+    if (isset($vid)) {
+      while ($view_per_type = db_fetch_object($views_per_type_query)) {
+        if ($vid == $view_per_type->vid) {
+          return $nid;
+        }
+      }
+    }
+    else {
+      return $nid;
+    }
+  }
+  return FALSE;
+}
+
+/*****************************************************************************
+* IMPLEMENTATION OF THE NODEAPI HOOK
+****************************************************************************/
+
+/**
+ * A node is being viewed.
+ */
+function _relatedcontent_node_view(&$node, $teaser, $page) {
+  // Get settings.
+  $output_placing = relatedcontent_variable_output_placing($node->type);
+  $output_teasers = $teaser || relatedcontent_variable_output_teasers($node->type);
+
+  $output_grouped = relatedcontent_variable_output_grouped($node->type);
+  // Abort if output isn't wanted in general, or when viewing a teaser.
+  if (!$output_placing || $teaser && relatedcontent_variable_exclude_teasers($node->type)) return;
+
+  // Get the related content. Abort if the node lacks related content.
+  if (!$node->nodes || !($output = _relatedcontent($node, $output_grouped, 'node_view', array($output_teasers)))) return;
+
+  // Theme the related content.
+  $output = theme('relatedcontent', $output, $output_grouped, $node->type, $teaser, $page);
+  $node->content['relatedcontent']['#value'] = $output;
+  
+  // Add the themed output to the node's body.
+  switch ($output_placing) {
+    case 'beginning':
+      $node->content['relatedcontent']['#weight'] = $node->content['body']['#weight'] - 1;
+      break;
+    case 'end':
+      $node->content['relatedcontent']['#weight'] = $node->content['body']['#weight'] + 1;
+      break;
+  }
+}
+
+/**
+ * A node is being loaded.
+ */
+function _relatedcontent_node_load(&$node) {
+  return array('nodes' => _relatedcontent_db_load($node->nid));
+}
+
+/**
+ * A node is being deleted.
+ */
+function _relatedcontent_node_delete(&$node) {
+  _relatedcontent_db_delete($node->nid);
+}
+
+
+/*****************************************************************************
+* IMPLEMENTATION OF THE HELP HOOK
+****************************************************************************/
+
+function _relatedcontent_help_help() {
+  // Load the help text.
+  $help = file_get_contents('relatedcontent.help', FILE_USE_INCLUDE_PATH);
+
+  // Abort if we can't find the file.
+  if (!$help) return;
+
+  // Substitute variables and translate.
+  $version = str_replace(array('$Re'.'vision:', ' $'), array('', ''), '$Revision: 1.16.2.13.2.5 $');
+  $year = drupal_substr('$Date: 2009/12/09 12:45:19 $', 7, 4);
+  $help = t($help, array('!version' => $version, '!year' => $year));
+
+  // Some styling. (This is really dirty, but...)
+  $style = <<<EOT
+<style type="text/css" media="all">
+/*<![CDATA[*/
+  code, kbd, pre { padding: 1px; font-family: "Bitstream Vera Sans Mono", Monaco, "Lucida Console", monospace; background-color: #EDF1F3; }
+/*]]>*/
+</style>
+EOT;
+
+  return $style . $help;
+}
+
+
+/*****************************************************************************
+* ALTER NODE TYPE FORM
+****************************************************************************/
+
+/**
+ * Add RelatedContent settings to the node type forms.
+ */
+function _relatedcontent_form_alter_node_type(&$form) {
+
+  // Get the node type
+  $type = $form['#node_type']->type;
+  // Build the form.
+  $form['relatedcontent'] = _relatedcontent_form_alter_node_type_relatedcontent($type);
+  $form['relatedcontent']['settings'] = _relatedcontent_form_alter_node_type_settings($type);
+  $form['relatedcontent']['views'] = _relatedcontent_form_alter_node_type_views($type);
+
+  // Let our own submit function handle the form before it is passed on to the
+  // default submit function node_type_form_submit().
+  $form['#submit'][]='_relatedcontent_form_alter_node_type_submit';
+}
+
+/**
+ * Build the RelatedContent fieldset of the node type form.
+ */
+function _relatedcontent_form_alter_node_type_relatedcontent($type) {
+
+  // The fieldset.
+  $form = array(
+  '#type' => 'fieldset',
+  '#title' => t('RelatedContent configuration'),
+  '#description' => t(
+  'Configure how RelatedContent should work on nodes of the type %type. For more information, see the !help.',
+  array('!type' => $type, '!help' => l(t('help page'), 'admin/help/relatedcontent'))
+  ),
+  '#collapsible' => TRUE,
+  '#collapsed' => !relatedcontent_variable_enabled($type),
+  );
+
+  // Ask if related content should be enabled on this content type.
+  $form['relatedcontent_enabled'] = array(
+  '#type' => 'checkbox',
+  '#title' => t('Enable'),
+  '#description' => t('Check to enable RelatedContent for nodes of this content type.'),
+  '#default_value' => relatedcontent_variable_enabled($type),
+  );
+
+  return $form;
+
+}
+
+/**
+ * Build the settings fieldset of the RelatedContent configuration fieldset.
+ */
+function _relatedcontent_form_alter_node_type_settings($type) {
+
+  // The fieldset.
+  $form = array(
+  '#type' => 'fieldset',
+  '#title' => t('Settings'),
+  '#collapsible' => TRUE,
+  '#collapsed' => TRUE,
+  );
+
+  // Ask how many nodes to list in the related content select form.
+  $form['relatedcontent_length'] = array(
+  '#type' => 'select',
+  '#title' => t('Length of node table'),
+  '#description' => t('The number of nodes to be displayed on each page of the table with nodes to select from.'),
+  '#options' => array(10 => 10, 20 => 20, 50 => 50, 100 => 100, 0 => t('All nodes')),
+  '#default_value' => relatedcontent_variable_length($type),
+  );
+
+  // Ask where the related nodes are going to be placed in the body.
+  $form['relatedcontent_exclude_teasers'] = array(
+  '#type' => 'radios',
+  '#title' => t('Related content in teasers'),
+  '#description' => t('Choose whether the related content of a node should be included or excluded in the teaser of that node.'),
+  '#options' => array(FALSE => t('Include'), TRUE => t('Exclude')),
+  '#default_value' => relatedcontent_variable_exclude_teasers($type),
+  );
+
+  // Ask where the related nodes are going to be placed in the body.
+  $form['relatedcontent_output_placing'] = array(
+  '#type' => 'radios',
+  '#title' => t('Where to display'),
+  '#description' => t('Choose if the where the related content should be outputted.'),
+  '#options' => array('beginning' => t('Beginning'), 'end' => t('End'), FALSE => 'Not at all'),
+  '#default_value' => relatedcontent_variable_output_placing($type),
+  );
+
+  // Ask if the the related nodes are going to be output as teasers or bodies.
+  $form['relatedcontent_output_teasers'] = array(
+  '#type' => 'radios',
+  '#title' => t('What to display'),
+  '#description' => t('Choose whether the related content should be displayed as teasers or bodies of the selected nodes.'),
+  '#options' => array(TRUE => t('Teasers'), FALSE => t('Bodies')),
+  '#default_value' => relatedcontent_variable_output_teasers($type),
+  );
+
+  // Ask the kind of grouping, if any.
+  $form['relatedcontent_output_grouped'] = array(
+  '#type' => 'radios',
+  '#title' => t('How to display'),
+  '#description' => t('Choose how the related content should be grouped.'),
+  '#options' => array('type' => t('Grouped by content type'), 'author' => t('Grouped by author'), 'view' => t('Grouped by view'), FALSE => t('Without grouping')),
+  '#default_value' => relatedcontent_variable_output_grouped($type),
+  );
+  
+    // Ask the kind of grouping, if any.
+  $form['relatedcontent_links_absolute'] = array(
+  '#type' => 'radios',
+  '#title' => t('Create absolute links'),
+  '#description' => t('Choose if the link in related content should be absolute like "http://domain.com/node/123". This is useful in combination with newsletters.'),
+  '#options' => array(0 => t('No'), 1 => t('Yes')),
+  '#default_value' => relatedcontent_variable_links_absolute($type),
+  );
+
+  return $form;
+
+}
+
+/**
+ * Build the views selection fieldset of the RelatedContent configuration
+ * fieldset.
+ */
+function _relatedcontent_form_alter_node_type_views($type) {
+
+  // The fieldset.
+  $form = array(
+  '#type' => 'fieldset',
+  '#title' => t('Views'),
+  '#description' => t(
+  "The table below lists all available views from which related content can be selected, as well as any deleted view for which nodes has been selected. The <em>View</em> and <em>Description</em> columns contains the names and descriptions, respectively, of the views, as seen in the !views page. When the related content is displayed grouped by view, the values of the <em>Display name</em> column is used as headings of the groups, or, if left blank, the views' names. The related content is displayed view by view. The order of the views is determined from their values in the <em>Weight</em> column. Tick the views to be used by nodes of this content type.",
+  array('!views' => l(t('Administer views'), 'admin/build/views'))
+  ),
+  '#collapsible' => TRUE,
+  '#collapsed' => FALSE,
+  );
+
+  // Build a table with a view per row. Each view has a checkbox for enabling
+  // and disabling it, its name an description and a weight selection box. The
+  // actual table is built by a theming function.
+  if ($views = _relatedcontent_db_get_views_for_type($type)) {
+    foreach ($views as $view) {
+      $view_name = $view->name ? l($view->name, "admin/build/views/edit/$view->name") : $view->name;
+      $form['enabled'][$view->vid] = array(
+      '#type' => 'checkbox',
+      '#return_value' => TRUE,
+      '#default_value' => $view->enabled,
+      );
+      $form['name'][$view->vid] = array('#value' => $view_name);
+      $form['description'][$view->vid] = array('#value' => $view->object);
+      $form['title'][$view->vid] = array('#type' => 'textfield', '#default_value' => $view->title, '#size' => 32);
+    }
+  }
+
+  // Add some directives.
+  $form['#tree'] = TRUE;
+  $form['#theme'] = 'relatedcontent_form_alter_node_type_views';
+
+  return $form;
+
+}
+
+/**
+ * Handles the submission of the views selection in the node type form.
+ */
+function _relatedcontent_form_alter_node_type_submit($form, &$form_state) {
+  // Abort if there is no views to save.
+  if (!$form_state['values']['views']) return;
+
+  // Save the information about the views.
+  $type = $form_state['values']['type'];
+  foreach ($form_state['values']['views']['enabled'] as $vid => $enabled) {
+    $weight = 0;
+    $title = $form_state['values']['views']['title'][$vid];
+    $title ? $title : NULL;
+    _relatedcontent_db_set_view($type, $vid, $title, $weight, $enabled);
+  }
+
+  // this needs to be done because local tasks can have an other name
+  // menu caches needs to be rebuild.
+  menu_rebuild();
+}
+
+
+/*****************************************************************************
+* OVERVIEW FORM
+****************************************************************************/
+
+/**
+ * Builds the related content list form.
+ */
+function _relatedcontent_form($form, $nid) {
+
+  //mc this nodeload should not be needed
+  $node = node_load($nid);
+
+  $form = array();
+
+  // Set the page title.
+  drupal_set_title(t('RelatedContent'));
+
+  // Build the form.
+  _relatedcontent_form_introduction($form, $node->type);
+  _relatedcontent_form_table($form, $node->nodes);
+  _relatedcontent_form_buttons($form);
+  _relatedcontent_form_directives($form);
+
+  return $form;
+
+}
+
+/**
+ * Adds a introductory text to the form.
+ */
+function _relatedcontent_form_introduction(&$form, $type) {
+  $form['intro'] = array(
+  '#value' => t(
+  "The table below lists nodes that have content related to this node. The nodes are grouped by the Views from which they once were selected. To remove nodes from the table, untick their checkboxes and press the <em>Update</em> button. For more information, see the !help.",
+  array('!help' => l(t('help page'), 'admin/help/relatedcontent'))
+  ),
+  );
+}
+
+/**
+ * Adds the table of nodes with related content to the form.
+ */
+function _relatedcontent_form_table(&$form, $selected_nodes) {
+
+  if (count($selected_nodes)) {
+    foreach ($selected_nodes as $vid => $nodes) {
+      foreach ($nodes as $nid => $ordinal) {
+        $node = node_load($nid);
+        $form['nodes'][$vid][$node->nid] = array(
+        '#type' => 'checkbox',
+        '#return_value' => $ordinal,
+        '#default_value' => TRUE,
+        );
+        $form['title'][$vid][$node->nid] = array('#value' => l($node->title, 'node/'. $node->nid) .' '. theme('mark', node_mark($node->nid, $node->changed)));
+        $form['name'][$vid][$node->nid] =  array('#value' => node_get_types('name', $node));
+        $form['created'][$vid][$node->nid] = array('#value' => format_date($node->created, 'small'));
+        $form['username'][$vid][$node->nid] = array('#value' => theme('username', $node));
+      }
+    }
+  }
+}
+
+/**
+ * Adds button to the form.
+ */
+function _relatedcontent_form_buttons(&$form) {
+  $form['buttons']['update'] = array(
+  '#type' => 'submit',
+  '#value' => t('Update'),
+  '#weight' => 10,
+  );
+}
+
+/**
+ * Adds form processing directives.
+ */
+function _relatedcontent_form_directives(&$form) {
+  $form['#tree'] = TRUE;
+  $form['#theme'] = 'relatedcontent_form';
+}
+
+/**
+ * Handles the submission of the related content list form.
+ */
+function _relatedcontent_form_submit($form, &$form_state) {
+  // Abort if there is no nodes.
+  if (!$form_state['values']['nodes']) return;
+
+  // Get the nid and vid.
+  $nid = arg(1);
+  // We are saving. Store the selected nodes in the node.
+  foreach ($form_state['values']['nodes'] as $vid => $nodes) {
+    $nodes = array_filter($nodes);
+    _relatedcontent_db_delete($nid, $vid);
+    _relatedcontent_db_insert($nid, $vid, $nodes);
+  }
+}
+
+
+/*****************************************************************************
+* VIEW FORMS
+****************************************************************************/
+
+/**
+ * Builds the related content view form.
+ */
+function _relatedcontent_form_view($form_values = NULL, &$nid, $view_id) {
+  // Two global variables needed by the pager.
+  // Taken from pager_query() in pager.inc
+  global $pager_page_array, $pager_total, $pager_items_per_page;
+
+  $node = node_load($nid);
+
+  $form = array();
+  // Get the view that will provide the node list. Abort if the the view has
+  // been removed and the content type hasn't been updated accordingly.
+  if (!($view = _relatedcontent_form_get_view($view_id, $node->type))) return;
+
+  // Set the page title.
+  drupal_set_title(t('RelatedContent'));
+
+  // unset the pager else the result will limit to number of items on a page of the view. We want all te results.
+  unset($view->pager);
+  $view->execute();
+  $db_result = $view->result;
+
+  // if the first result doesn't have a nid as part of the result
+  // than most likely we dealing with a view like 'archive'.
+  if (!isset($db_result[0]->nid)) {
+    $db_result = array();
+  }
+
+  // initiate paging
+  $pager_items_per_page = relatedcontent_variable_length($node->type);
+  $pages = _relatedcontent_items_per_page($db_result, $pager_items_per_page);
+  $page = isset($_GET['page']) ? $_GET['page'] : 0;
+
+  $db_result = array_slice($db_result, ($page*$pager_items_per_page), $pager_items_per_page);
+
+  // Convert comma-separated $page to an array, used by other functions.
+  // Taken from pager_query() in pager.inc
+  $pager_page_array = explode(',', $page);
+  $pager_total[0] = $pages;
+  $pager_page_array[0] = max(0, min((int)$pager_page_array[0], ( (int)$pager_total[0]) - 1));
+
+  _relatedcontent_track_initialize($node->nid, $node->nodes[$view_id]);
+
+  // Build the form.
+  _relatedcontent_form_view_introduction($form, $node->type);
+  _relatedcontent_form_view_table($form, $db_result, $node, $view_id);
+  _relatedcontent_form_view_buttons($form);
+  _relatedcontent_form_view_hidden_values($form, $view_id);
+  _relatedcontent_form_view_directives($form);
+
+  return $form;
+
+}
+
+/**
+ * Load the view. Display an error message if it has been removed.
+ */
+function _relatedcontent_form_get_view($view, $type) {
+
+  // Load the named view and return it.
+  if ($view = views_get_view($view)) return $view;
+
+  // No view was given, or the named view didn't exist. Log and display
+  // an error message.
+  $message = t(
+  'RelatedContent uses <a href="!views-url">views</a> as its source of nodes. The specified view %view-name doesn\'t exist any more. Please, go to the <a href="!settings-url">settings of the content type "@content-type"</a> and select another view.',
+  array(
+  '!views-url' => url('admin/build/views'),
+  '!settings-url' => url("admin/content/types/$type"),
+  '@view-name' => $view_name,
+  '@content-type' => $type,
+  )
+  );
+  watchdog('relatedcontent', $message, WATCHDOG_ERROR);
+  drupal_set_message($message, 'error');
+
+}
+
+/**
+ * Advance the page. If $page_number is not set, we are on the first page.
+ */
+function _relatedcontent_form_get_next_page_number(&$form, $page_number, $op) {
+  if (!isset($page_number)) return 0;
+  switch ($op) {
+    case t('Next'):
+      return ++$page_number;
+    case t('Previous'):
+      return --$page_number;
+  }
+}
+
+/**
+ * Calculate the number of the very last page.
+ */
+function _relatedcontent_form_get_max_page_number(&$form, $max_page_number, $page_length, $count_query, $rewrite_args) {
+  if (!isset($max_page_number)) {
+    if ($page_length) {
+      $count = db_rewrite_sql($count_query, 'node', 'nid', $rewrite_args);
+      $count = db_result(db_query($count));
+      $max_page_number = ceil($count / $page_length) - 1;
+    }
+    else {
+      $max_page_number = 0;
+    }
+  }
+  return $max_page_number;
+}
+
+/**
+ * Adds a introductory text to the form.
+ */
+function _relatedcontent_form_view_introduction(&$form, $type) {
+  $form['intro'] = array(
+  '#value' => t(
+  "Select nodes to be added to this !type. For more information, see the !help.",
+  array('!type' => $type, '!help' => l(t('help page'), 'admin/help/relatedcontent'))
+  ),
+  );
+}
+
+/**
+ * Adds the table of nodes with related content to the form.
+ */
+function _relatedcontent_form_view_table(&$form, $db_result, $node, $vid) {
+
+  $ordinal = 0;
+  $selected_nodes = $node->nodes[$vid];
+
+  foreach ($db_result as $key => $node_result) {
+    $node = node_load($node_result->nid);
+
+    $form['nodes'][$vid][$node->nid] = array(
+    '#type' => 'checkbox',
+    '#return_value' => ++$ordinal,
+    '#attributes' => $selected_nodes[$node->nid] ? array('checked' => 'checked') : NULL, // See http://drupal.org/node/187413.
+    );
+    $form['title'][$vid][$node->nid] = array('#value' => l($node->title, 'node/'. $node->nid) .' '. theme('mark', node_mark($node->nid, $node->changed)));
+    $form['name'][$vid][$node->nid] =  array('#value' => node_get_types('name', $node));
+    $form['created'][$vid][$node->nid] = array('#value' => format_date($node->created, 'small'));
+    $form['username'][$vid][$node->nid] = array('#value' => theme('username', $node));
+  }
+}
+
+/**
+ * Adds buttons to the form.
+ */
+//mc function _relatedcontent_form_view_buttons(&$form, $page_number, $max_page_number) {
+function _relatedcontent_form_view_buttons(&$form) {
+
+  // On all pages, add an update button.
+  $form['buttons']['update'] = array(
+  '#type' => 'submit',
+  '#value' => t('Update'),
+  '#weight' => 5,
+  );
+
+}
+
+/**
+ * Adds hidden fields with information needed later.
+ */
+function _relatedcontent_form_view_hidden_values(&$form, $view_id) {
+
+  // Store the view's id.
+  $form['view_id'] = array(
+  '#type' => 'hidden',
+  '#value' => $view_id,
+  );
+
+}
+
+/**
+ * Adds form processing directives.
+ */
+function _relatedcontent_form_view_directives(&$form) {
+  //mc $form['#multistep'] = TRUE;
+  $form['#tree'] = TRUE;
+  $form['#theme'] = 'relatedcontent_form';
+}
+
+/**
+ * Handles the submission of the related content form.
+ */
+function _relatedcontent_form_view_submit($form, &$form_state) {
+
+  // Get the nid and vid.
+  $nid = arg(1);
+  $vid = $form_state['values']['view_id'];
+  // Track changes done on the current form page.
+  $offset = $form_state['values']['page_number'] * $form_state['values']['page_length'];
+  _relatedcontent_track_update_selected_nodes($nid, $form_state['values']['nodes'][$vid], $offset, $form_state['values']['page_number']);
+
+  // If we are not saving, return to the form again.
+  if ($form_state['clicked_button']['#value'] != t('Update')) return FALSE;
+
+  // We are saving. Finalize the tracking; and store the tracked changes.
+  $nodes = _relatedcontent_track_finalize($nid, $vid, $form_state['values']['page_length'], $form_state['values']['max_page_number']);
+  _relatedcontent_db_delete($nid, $vid);
+  _relatedcontent_db_insert($nid, $vid, $nodes);
+
+  drupal_goto("node/$nid/relatedcontent");
+
+}
+
+/*****************************************************************************
+* SELECTED NODES TRACKING
+*****************************************************************************/
+
+/**
+ * Initalize the selected nodes tracker
+ * @see _relatedcontent_track_finalize() for details
+ */
+function _relatedcontent_track_initialize($nid, $nodes) {
+
+  // Tracks selected nodes as we move from one page to another.
+  $_SESSION['relatedcontent'][$nid]['nodes'] = isset($nodes) ? $nodes : array();
+
+  // Tracks the highets page number visited.
+  $_SESSION['relatedcontent'][$nid]['highest_page_number'] = 0;
+
+}
+
+/**
+ * Add $nodes to the selected nodes tracker
+ *
+ * @see _relatedcontent_track_finalize() for details
+ */
+function _relatedcontent_track_update_selected_nodes($nid, $nodes, $offset, $page_number) {
+
+  // Abort if there is no nodes.
+  if (!$nodes) return;
+
+  // Keep track of the highest page number visited.
+  if ($_SESSION['relatedcontent'][$nid]['highest_page_number'] < $page_number) {
+    $_SESSION['relatedcontent'][$nid]['highest_page_number'] = $page_number;
+  }
+
+  // The ordinal numbers of the passed must be added by an offset to keep
+  // the sort order from one page to another.
+  foreach ($nodes as $id => $ordinal) {
+    if ($ordinal) {
+      $nodes[$id] += $offset;
+    }
+  }
+
+  // For keys in $_SESSION['relatedcontent'][$nid]['nodes'] for which there is no key
+  // in $nodes, append corresponding value $_SESSION['relatedcontent'][$nid]['nodes']
+  // to $node.
+
+  if (isset( $_SESSION['relatedcontent'][$nid]['nodes'])) {
+    $nodes += $_SESSION['relatedcontent'][$nid]['nodes'];
+  }
+  // Remove all non-selected nodes.
+  $nodes = array_filter($nodes);
+
+  // Store the nodes in the session.
+  $_SESSION['relatedcontent'][$nid]['nodes'] = $nodes;
+
+}
+
+/**
+ * Returns the traced selected nodes
+ *
+ * @see _relatedcontent_track_finalize() for details
+ */
+function _relatedcontent_track_get_selected_nodes($nid) {
+  return $_SESSION['relatedcontent'][$nid]['nodes'];
+}
+
+/**
+ * Finalizing the tracking, and returns the selected nodes.
+ *
+ * Nodes with related content get those loaded into an array where the keys are
+ * the nodes' id and the values are ordinal numbers implying an order by which
+ * they should be displayed. These initial ordinal numbers are negative.
+ *
+ * Upon first display of the table with nodes to select from, the tracker is
+ * initialized with these tuples of node id and negative ordinal numbers.
+ * Each time the user moves from one page of the table to another, or click on
+ * the Update button, the tracker updates the ordinal number of those nodes
+ * displayed on the page the user is leaving. The updated numbers are positive,
+ * and chosen to reflect the sort order among the seen nodes.
+ *
+ * We have a contract with the user to not break the sort order of already
+ * selected nodes if they are available in the view. We must therefore
+ * "visit" all pages that has not yet been displayed, and update the ordinal
+ * numbers of those remaining nodes which we find on these pages. In many
+ * applications of RelatedContent it is likely to find the remaining nodes
+ * among the first non-visited pages. This given, and the potential that
+ * there might be many unvisited pages, which translates into many round-
+ * trips to the database, we abort the search as soon as possible. However,
+ * if there are orphan nodes (see the on-line help), we will visit all pages
+ * in vain.
+ */
+function _relatedcontent_track_finalize($nid, $view_id, $page_length, $max_page_number) {
+
+  // Get the tracked information.
+  $nodes = $_SESSION['relatedcontent'][$nid]['nodes'];
+  $page = $_SESSION['relatedcontent'][$nid]['highest_page_number'];
+
+  // Get the node id of those nodes which haven't been seen. These are at the
+  // end of the array of tracked nodes and are recognized by negative ordinal
+  // numbers.
+  for (end($nodes); current($nodes) < 0 ; prev($nodes)) {
+    $remaining_nodes[key($nodes)] = TRUE;
+  }
+
+  // Visit all pages that has not been displayed, and update the ordinal
+  // numbers of those remaining nodes which we find on these pages.
+  $view = views_get_view($view_id); // Get the view.
+  $ordinal = ($page + 1) * $page_length; // The last used ordinal number.
+  while (++$page <= $max_page_number) { // For each page not yet visited...
+    $info = views_build_view('result', $view, array(), FALSE, $page_length, $page); // Get the nodes on the current page.
+    while ($node = db_fetch_object($info['result'])) { // For each node on the current page...
+      ++$ordinal; // Next ordinal number.
+      if ($remaining_nodes[$node->nid]) { // If current node is among the remaining ones...
+        $nodes[$node->nid] = $ordinal; // Assign an ordinal number.
+        unset($remaining_nodes[$node->nid]); // Remove it from the list of remaining nodes.
+        if (count($remaining_nodes) == 0) break 2; // Abort as soon as possible.
+      }
+    }
+  }
+
+  // Clean up.
+  unset($_SESSION['relatedcontent'][$nid]);
+
+  return $nodes;
+
+}
+
+/*****************************************************************************
+* GROUPING
+****************************************************************************/
+
+/**
+ * For each node with related content and which the user is allowed to view,
+ * append the related content to the end of the output buffer of the relevant
+ * group.
+ */
+function _relatedcontent(&$node, $output_grouped, $content_function, $args) {
+  array_unshift($args, 0);
+  foreach ($node->nodes as $vid => $selected_nodes) {
+    foreach ($selected_nodes as $nid => $ordinal) {
+      if ($nid && ($n = node_load($nid)) && node_access ('view', $n)) {
+        $n->relatedcontent = $node->nid;
+        $args[0] = $n;
+        $key = _relatedcontent_group_key($n, $output_grouped, $vid);
+        $output[$key][] = call_user_func_array($content_function, $args);
+      }
+    }
+  }
+  return $output;
+}
+
+/**
+ * Returns the key into the group array of the node object $node. If the nodes
+ * are grouped by views, $vid must be the id of the view from which the node
+ * was picked.
+ */
+function _relatedcontent_group_key($node, $grouped, $vid = NULL) {
+  switch ($grouped) {
+    case 'type':
+      return $node->type;
+    case 'author':
+      return $node->name;
+    case 'view':
+      return "view-$vid"; // See relatedcontent_group_title().
+    default:
+      return 'all';
+  }
+}
+
+/**
+ * Returns the heading of the group $group.
+ *
+ * @param group
+ *   The group of which the heading is requested.
+ * @param grouped
+ *   How the grouping is done, i.e. by type, by author, by view or not at all.
+ * @param type
+ *   The content type of the node of which the related content is grouped.
+ * @return
+ *   The heading of the group $group.
+ */
+function relatedcontent_group_title($group, $grouped, $type = NULL) {
+  switch ($grouped) {
+    case 'type':
+      return $group;
+    case 'author':
+      return $group;
+    case 'view':
+      $group = explode('-', $group);
+      $vid = $group[1]; // See _relatedcontent_group_key().
+      return relatedcontent_view_title($vid, $type);
+    default:
+      return '';
+  }
+}
+
+/**
+ * Returns the heading of the view $vid.
+ *
+ * @param $vid
+ *   The view id of which the heading is requested.
+ * @param $type
+ *   The content type of the node of which the related content is picked from
+ *   the view.
+ * @return
+ *   The heading of the view $vid.
+ */
+function relatedcontent_view_title($vid, $type) {
+
+  // On the first call, load information objects about all known views.
+  static $views = array();
+  if (!$views[$type]) {
+    $views[$type] = _relatedcontent_db_get_views_for_type($type);
+  }
+
+  // Get the view's title.
+  $view = $views[$type][$vid];
+  if ($view->title) {
+    $title = $view->title;
+  }
+  else {
+    $title = $view->name;
+  }
+
+  return $title;
+
+}
+
+
+/*****************************************************************************
+* PERSISTED VARIABLES
+****************************************************************************/
+
+/**
+ * The persisted variable 'enabled' which is TRUE/FALSE whether the
+ * related content is enabled or not, respectively, for the content type.
+ *  Default value, if the variable does not exists, is FALSE.
+ */
+function relatedcontent_variable_enabled($type, $enabled = NULL) {
+  return _relatedcontent_variable("relatedcontent_enabled_$type", $enabled, FALSE);
+}
+
+/**
+ * The persisted variable 'view' containing the name of the view to feed the
+ * assembler for a node of the given type.  Default value, if the variable does
+ * not exists, is ''.
+ */
+function relatedcontent_variable_view($type, $view = NULL) {
+  return _relatedcontent_variable("relatedcontent_view_$type", $view, '');
+}
+
+/**
+ * The persisted variable 'length' containing the number of nodes to show in
+ * the assembler for a node of the given type.  Default value, if the variable
+ * does not exists, is 50.
+ */
+function relatedcontent_variable_length($type, $page_length = NULL) {
+  return _relatedcontent_variable("relatedcontent_length_$type", $page_length, 50);
+}
+
+/**
+ * The persisted variable 'exclude_teasers' which is TRUE/FALSE whether the
+ * related content should excluded in teasers or not respectively.  Default
+ * value, if the variable does not exists, is TRUE.
+ */
+function relatedcontent_variable_exclude_teasers($type, $exclude_teasers = NULL) {
+  return _relatedcontent_variable("relatedcontent_exclude_teasers_$type", $exclude_teasers, TRUE);
+}
+
+/**
+ * The persisted variable 'teasers' which is TRUE/FALSE whether the related
+ * content should be viewed as teasers or full bodies respectively.  Default
+ * value, if the variable does not exists, is TRUE.
+ */
+function relatedcontent_variable_output_teasers($type, $teasers = NULL) {
+  return _relatedcontent_variable("relatedcontent_output_teasers_$type", $teasers, TRUE);
+}
+
+/**
+ * The persisted variable 'grouped' which is FALSE or a string with the name
+ * of the node attribute, e.g. 'type' and 'name', by which the related content
+ * should be grouped by. Default value, if the variable does not exists, is
+ * 'type'.
+ */
+function relatedcontent_variable_output_grouped($type, $grouped = NULL) {
+  return _relatedcontent_variable("relatedcontent_output_grouped_$type", $grouped, 'type');
+}
+
+/**
+ * The persisted variable 'after' which is FALSE if related content should not
+ * be outputted, 'beginning' or 'end' if the output should be at the beginning
+ * or end respectively. Default value, if the variable does not exists, is
+ * 'end'.
+ */
+function relatedcontent_variable_output_placing($type, $placing = NULL) {
+  return _relatedcontent_variable("relatedcontent_output_placing_$type", $placing, 'end');
+}
+
+/**
+ * The persisted variable 'links absolute' determines wheter the generated links
+ * in the relatedcontent should be absolute or not. Default is not. 
+ */
+function relatedcontent_variable_links_absolute($type, $links = NULL) {
+  return _relatedcontent_variable("relatedcontent_links_absolute_$type", $links, 0);
+}
+
+/**
+ * Sets and gets the named persisted variable.
+ */
+function _relatedcontent_variable($name, $value = NULL, $default = NULL) {
+  if (isset($value)) {
+    variable_set($name, $value);
+  }
+  return variable_get($name, $default);
+}
+
+
+/*****************************************************************************
+* DATABASE
+****************************************************************************/
+
+/**
+ * Returns the content type of the node with the provided node id.
+ */
+function _relatedcontent_db_content_type($nid) {
+  if ($db_result = _relatedcontent_db_query(__FUNCTION__, $nid)) {
+    $node = db_fetch_object($db_result);
+    return $node->type;
+  }
+}
+
+/**
+ * Returns an array of views enabled for the content type $type, where the keys
+ * are views' id and the values are objects with following attributes:
+ *
+ *   - vid:         the id of the view,
+ *   - name:        the name of the view,
+ *   - description: a description of the view,
+ *   - title:       this module's display name of the view,
+ *   - weight:      the weight of the view for the content type $type, and
+ *   - enabled:     whether the view is enabled for the content type $type.
+ *
+ */
+//mc function _relatedcontent_db_enabled_views($type) {
+function _relatedcontent_db_enabled_views() {
+  //mc if ($db_result = _relatedcontent_db_query(__FUNCTION__, $type, 1)) {
+  if ($db_result = _relatedcontent_db_query(__FUNCTION__, 1)) {
+    while ($view = db_fetch_object($db_result)) {
+      $views[$view->vid] = $view;
+    }
+    return $views;
+  }
+}
+
+/**
+ * Returns an array of view information objects for all existing views, as well
+ * as views that are deleted, but for which there are nodes of the content
+ * type $type which have related content picked from the view. The object has
+ * following attributes:
+ *
+ *   - vid:         the id of the view,
+ *   - name:        the name of the view, if existing,
+ *   - description: a description of the view, if existing,
+ *   - title:       this module's display name of the view,
+ *   - weight:      the weight of the view for the content type $type, and
+ *   - enabled:     whether the view is enabled for the content type $type.
+ *
+ */
+function _relatedcontent_db_get_views_for_type($type) {
+
+  $enabled_views = array();
+  $all_views = views_get_all_views();
+  if ($db_result = _relatedcontent_db_query(__FUNCTION__, $type, $type)) {
+    while ($views = db_fetch_object($db_result)) {
+      $relatedviews[$views->vid] = $views;
+    }
+  }
+
+
+  foreach ($all_views as $view_key => $view_object) {
+    // check if the view is enabled
+    if (empty($view_object->disabled) && ($view_object->base_table == 'node')) {
+      $view = new stdClass();
+      $view->name = $view_object->name;
+      $view->object = $view_object->description;
+      $view->vid = $view_object->vid ? $view_object->vid : $view_key;
+      if (isset($relatedviews[$view->vid])) {
+        $view->type = $relatedviews[$view->vid]->type;
+        $view->title = $relatedviews[$view->vid]->title;
+        $view->description = $relatedviews[$view->vid]->description;
+        $view->enabled = $relatedviews[$view->vid]->enabled;
+      }
+      $enabled_views[$view->vid] = $view;
+    }
+  }
+  return $enabled_views;
+}
+
+/**
+ * Insert/update the enable and weight attributes of the view with the id $vid
+ * for the content type $type.
+ */
+function _relatedcontent_db_set_view($type, $vid, $title, $weight, $enabled) {
+  _relatedcontent_db_query(__FUNCTION__ .'_update', $enabled, $title, $weight, $vid, $type);
+  if (db_affected_rows() < 1) {
+    _relatedcontent_db_query(__FUNCTION__ .'_insert', $type, $vid, $title, $weight, $enabled);
+  }
+}
+
+/**
+ * Load nid of included nodes from database.
+ *
+ * Get the related content of $nid, and put it into a map. The keys are the id
+ * of the nodes with the related content. The values are ordinal numbers. The
+ * ordinal numbers are negative, going from -N, where N is the count of pairs
+ * in the map, to -1. The reason is to flag that these numbers doesn't come
+ * from the user selecting nodes, but from the database. The ordinal number
+ * itself is irrelevant; it's only their order that matters.
+ */
+function _relatedcontent_db_load($nid) {
+  $nodes = array();
+
+  $ordinal = 1;
+  if ($db_result = _relatedcontent_db_query(__FUNCTION__, $nid)) {
+    while ($node = db_fetch_object($db_result)) {
+      //$nodes[$node->vid][$node->include_nid] = $ordinal++;
+      $nodes[$node->vid][$node->include_nid] = $ordinal++;
+    }
+  }
+  return $nodes;
+}
+
+/**
+ * Insert nid of included nodes into database.
+ */
+function _relatedcontent_db_insert($nid, $vid, $nodes) {
+  foreach ($nodes as $include_nid => $ordinal) {
+    $values[] = array($nid, $vid, $include_nid, $ordinal);
+  }
+  if ($values) {
+    _relatedcontent_db_query(__FUNCTION__, $values);
+  }
+}
+
+/**
+ * Delete nid of included nodes in database.
+ */
+function _relatedcontent_db_delete($nid, $vid = NULL) {
+  _relatedcontent_db_query(__FUNCTION__, $nid, $vid);
+}
+
+/**
+ * Delete unused and deleted views from the relatedcontent_view table.
+ *
+ * When a view that previously has been used to select nodes are deleted,
+ * its entry in the relatedcontent_view table should be removed when there are
+ * no orphaned nodes left. This function deletes any entries in the
+ * relatedcontent_view table that can be deleted.
+ */
+function _relatedcontent_db_sanitize_relatedcontent_view_table() {
+  _relatedcontent_db_query(__FUNCTION__);
+}
+
+/**
+ * Returns the result of the database specific query named $query_name.
+ */
+function _relatedcontent_db_query($query_name) {
+  static $included = FALSE;
+  // Include the database specific file with queries.
+  if (!$included) {
+    global $db_type;
+    $db = $db_type == 'mysqli' ? 'mysql' : $db_type;
+    $db_file = "relatedcontent.$db.inc";
+    if (!is_file(drupal_get_path('module', 'relatedcontent') ."/$db_file")) {
+      $msg = t("RelatedContent doesn't support !db_type.", array('!db_type' => $db_type));
+      drupal_set_message($msg, 'error');
+      return FALSE;
+    }
+    include_once $db_file;
+    $included = TRUE;
+  }
+
+  // Get the arguments.
+  $args = func_get_args();
+  array_shift($args);
+  if (isset($args[0]) and is_array($args[0])) {
+    $args = $args[0];
+  }
+
+  // Get the query, and new arguments, if any.
+  $query_function = $query_name .'_query';
+  if (!function_exists($query_function)) {
+    $msg = t("RelatedContent can't find the !query_name query for !db_type.", array('!query_name' => $query_name, '!db_type' => $db_type));
+    drupal_set_message($msg, 'error');
+    return FALSE;
+  }
+  $query = $query_function($args);
+
+  // Build the query.
+  $query = db_prefix_tables($query);
+  _db_query_callback($args, TRUE);
+  $query = preg_replace_callback(DB_QUERY_REGEXP, '_db_query_callback', $query);
+
+  // Do the database query, and return the status.
+  return _db_query($query);
+
+}
+
+
+/*****************************************************************************
+* PAGING FOR NON-SQL Data
+* according to http://www.norio.be/blog/2008/07/reusing-drupals-pager-non-sql-data
+****************************************************************************/
+
+/**
+ * function to determine how many pages are needed for the pager
+ * to cover all results.
+ *
+ * @param array $result
+ * @param integer $items_per_page
+ * @return integer
+ */
+function _relatedcontent_items_per_page($result, $items_per_page) {
+  return ceil(count($result) / $items_per_page);
+}
+
+/**
+ * block implemation
+ */
+function _related_content_block() {
+  if ((arg(0) == 'node') && is_numeric(arg(1))) {
+    $nid = arg(1);
+    $type_object = db_fetch_object(_relatedcontent_db_query('_relatedcontent_db_load_type', $nid));
+    $nodes = _relatedcontent_db_load($nid);
+    foreach ($nodes as $vid => $nids) {
+      $vid = relatedcontent_view_title($vid, $type_object->type);
+      $nids = _related_content_create_links($nids);
+      $output .= theme('item_list', $nids, $vid, 'ul');
+    }
+  }
+  return $output;
+}
+
+/**
+ * a small function to create links from nids
+ */
+function _related_content_create_links($nids) {
+  $links = array();
+  foreach ($nids as $nid => $ordinal) {
+    // we don't load the entire node object because that can be bad
+    // for performance
+    $title_object = db_fetch_object(_relatedcontent_db_query('_relatedcontent_db_load_title', $nid));
+    $links[$nid] = l($title_object->title, 'node/'. $nid);
+  }
+  return $links;
+}

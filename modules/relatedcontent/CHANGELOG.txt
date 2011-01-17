@@ -1,0 +1,24 @@
+The following notes describe the status of porting related content module to Drupal 6.x
+
+Changelog 21-12-2008
+
+/**
+ * Port from D5 to D6. D6.x alpha
+ */
+- Basic functionality has been ported meaning a relation can be created between nodes by using the result of a view.
+- Installer has been enriched with hook_schema so a full uninstall is possible. Thomas already achieved much of the functionality in D5 that is now covered by hook_schema.
+- API function in relatedcontent.module haven't been ported yet. So modules depending on this module probably won't work in this stage.
+- Hook menu needed a lot of love because of the changes between D5 and D6. With the help of wild-card loaders is determined if a view has to be shown as a local task.
+- Also in favor of hook_menu I introduced a permission in hook_perm because real live checking if a user has update access on a node is only possible with a wild-card loader of hook_menu. I thought this was more transparent.
+- implementation of hook_theme was of course needed.
+- .help file needs a review. I have not checked if the information is still accurate.
+- After changing a node-type now the menu is being rebuild in order to a update the local tasks defined in hook_menu
+- added drupal pager functionality instead of "Next" button in D5
+- ordinal number and weights functionality are not yet ported
+-This version works with Views 2. Only views with a 'node' as base table are shown in the list of a node-type. Even if it is 'node' a base table than related content might not show result. The archive or glossary view is a good example. This view gives as a result a page: November, 2008 (121) 
+- relatedcontent.tpl.php template is not yet supported
+- Code needs some love and care. It contains lines of code that are no longer in use.
+- code that has been added needs documentation
+- module needs some nice tests (simpletest)
+
+

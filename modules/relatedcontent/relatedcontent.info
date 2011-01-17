@@ -1,0 +1,15 @@
+; $Id: relatedcontent.info,v 1.2.2.2.2.1 2009/06/07 13:28:46 peterboeren Exp $
+name = RelatedContent
+description = Allows privileged users to associate a node with related nodes that can be displayed along with the node.
+package = Related Content
+dependencies[] = views
+core = 6.x
+
+
+
+; Information added by drupal.org packaging script on 2009-12-09
+version = "6.x-1.0"
+core = "6.x"
+project = "relatedcontent"
+datestamp = "1260364262"
+

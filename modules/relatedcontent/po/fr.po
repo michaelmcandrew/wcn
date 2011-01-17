@@ -1,0 +1,243 @@
+# $Id: fr.po,v 1.1.2.1 2008/11/12 15:09:30 slybud Exp $
+#
+# French translation of Drupal (general)
+# Copyright YEAR NAME <EMAIL@ADDRESS>
+# Generated from files:
+#  relatedcontent.module,v 1.16.2.13 2008/09/22 06:21:40 tbarregren
+#  relatedcontent.info,v 1.2.2.2 2008/01/09 21:41:48 tbarregren
+#  relatedcontent.install,v 1.3.2.6 2008/01/28 18:58:25 tbarregren
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: French translation for drupal relatedcontent module\n"
+"POT-Creation-Date: 2008-11-12 15:29+0100\n"
+"PO-Revision-Date: 2008-11-12 15:57+0100\n"
+"Last-Translator: Sylvain Moreau <sylvain.moreau@ows.fr>\n"
+"Language-Team: Sylvain Moreau, OWS <sylvain.moreau@ows.fr>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n>1);\n"
+"X-Poedit-Language: French\n"
+
+#: relatedcontent.module:238
+msgid "Title"
+msgstr "Titre"
+
+#: relatedcontent.module:238
+msgid "Type"
+msgstr "Type"
+
+#: relatedcontent.module:238
+msgid "Author"
+msgstr "Auteur"
+
+#: relatedcontent.module:238
+msgid "Created"
+msgstr "Créé"
+
+#: relatedcontent.module:266
+msgid "No nodes selected."
+msgstr "Aucun noeud sélectionné."
+
+#: relatedcontent.module:299
+msgid "View"
+msgstr "Voir"
+
+#: relatedcontent.module:299
+msgid "Description"
+msgstr "Description"
+
+#: relatedcontent.module:299
+msgid "Display name (optional)"
+msgstr "Nom à afficher (optionnel)"
+
+#: relatedcontent.module:299
+msgid "Weight"
+msgstr "Poids"
+
+#: relatedcontent.module:313
+msgid "No views available."
+msgstr "Aucune vue disponible."
+
+#: relatedcontent.module:402;729;833
+#: relatedcontent.info:0
+msgid "RelatedContent"
+msgstr "RelatedContent (Contenu Lié)"
+
+#: relatedcontent.module:414
+msgid "Overview"
+msgstr "Aperçu"
+
+#: relatedcontent.module:563
+msgid "RelatedContent configuration"
+msgstr "Configuration de RelatedContent (Contenu Lié)"
+
+#: relatedcontent.module:564
+msgid "Configure how RelatedContent should work on nodes of the type %type. For more information, see the !help."
+msgstr "Configurer la manière dont doit fonctionner RelatedContent (Contenu Lié) pour les noeuds de type %type. Pour plus d'informations, consulter l'!help"
+
+#: relatedcontent.module:566;748;919
+msgid "help page"
+msgstr "page d'aide"
+
+#: relatedcontent.module:575
+msgid "Enable"
+msgstr "Activé"
+
+#: relatedcontent.module:576
+msgid "Check to enable RelatedContent for nodes of this content type."
+msgstr "Cocher pour activer RelatedContent (Contenu Lié) pour les noeuds de ce type de contenu."
+
+#: relatedcontent.module:592
+msgid "Settings"
+msgstr "Paramètres"
+
+#: relatedcontent.module:600
+msgid "Length of node table"
+msgstr "Longueur de la table des noeuds"
+
+#: relatedcontent.module:601
+msgid "The number of nodes to be displayed on each page of the table with nodes to select from."
+msgstr "Le nombre de noeuds à afficher sur chaque page de la table des noeuds parmi lesquels sélectionner."
+
+#: relatedcontent.module:602
+msgid "All nodes"
+msgstr "Tous les noeuds"
+
+#: relatedcontent.module:609
+msgid "Related content in teasers"
+msgstr "Contenu lié dans les résumés"
+
+#: relatedcontent.module:610
+msgid "Choose whether the related content of a node should be included or excluded in the teaser of that node."
+msgstr "Sélectionnez si le contenu lié doit être inclus ou exclus des résumés de ce noeud."
+
+#: relatedcontent.module:611
+msgid "Include"
+msgstr "Inclure"
+
+#: relatedcontent.module:611
+msgid "Exclude"
+msgstr "Exclure"
+
+#: relatedcontent.module:618
+msgid "Where to display"
+msgstr "Où l'afficher"
+
+#: relatedcontent.module:619
+msgid "Choose if the where the related content should be outputted."
+msgstr "Sélectionnez où le contenu lié doit être affiché."
+
+#: relatedcontent.module:620
+msgid "Beginning"
+msgstr "Au début"
+
+#: relatedcontent.module:620
+msgid "End"
+msgstr "Fin"
+
+#: relatedcontent.module:627
+msgid "What to display"
+msgstr "Qu'afficher"
+
+#: relatedcontent.module:628
+msgid "Choose whether the related content should be displayed as teasers or bodies of the selected nodes."
+msgstr "Sélectionnez si le contenu lié doit être affiché en tant que résumé ou corps des noeuds sélectionnés."
+
+#: relatedcontent.module:629
+msgid "Teasers"
+msgstr "Résumés"
+
+#: relatedcontent.module:629
+msgid "Bodies"
+msgstr "Corps"
+
+#: relatedcontent.module:636
+msgid "How to display"
+msgstr "Comment l'afficher"
+
+#: relatedcontent.module:637
+msgid "Choose how the related content should be grouped."
+msgstr "Sélectionner la manière dont le contenu lié doit être regroupé."
+
+#: relatedcontent.module:638
+msgid "Grouped by content type"
+msgstr "Regroupé par type de contenu"
+
+#: relatedcontent.module:638
+msgid "Grouped by author"
+msgstr "Regroupé par auteur"
+
+#: relatedcontent.module:638
+msgid "Grouped by view"
+msgstr "Regroupé par vue"
+
+#: relatedcontent.module:638
+msgid "Without grouping"
+msgstr "Sans regroupement"
+
+#: relatedcontent.module:655
+msgid "Views"
+msgstr "Vues"
+
+#: relatedcontent.module:656
+msgid "The table below lists all available views from which related content can be selected, as well as any deleted view for which nodes has been selected. The <em>View</em> and <em>Description</em> columns contains the names and descriptions, respectively, of the views, as seen in the !views page. When the related content is displayed grouped by view, the values of the <em>Display name</em> column is used as headings of the groups, or, if left blank, the views' names. The related content is displayed view by view. The order of the views is determined from their values in the <em>Weight</em> column. Tick the views to be used by nodes of this content type."
+msgstr "Le tableau ci-dessous liste l'ensemble des vues disponibles pour la sélection des contenus liés, ainsi que toutes les vues supprimées pour lesquelles des noeuds ont été sélectionnés. Les colonnes <em>Vue</em> et <em>Description </em> contiennent respectivement les noms et descriptions des vues, comme vu sur la page !views. Lorsque le contenu lié est affiché regroupé par vue, les valeurs de la colonne <em>Nom à afficher</em> sont utilisées comme titres des groupes, ou bien, si laissées vides, le noms des vues. Le contenu lié est affiché vue par vue. L'ordre des vues est déterminé d'après les valeurs de la colonne <em>Poids</em>. Cochez les vues à utiliser pour les noeuds ce ce type de contenu."
+
+#: relatedcontent.module:658
+msgid "Administer views"
+msgstr "Administrer les vues"
+
+#: relatedcontent.module:746
+msgid "The table below lists nodes that have content related to this node. The nodes are grouped by the Views from which they once were selected. To remove nodes from the table, untick their checkboxes and press the <em>Update</em> button. For more information, see the !help."
+msgstr "Le tableau ci-desous liste les noeuds qui possédent du contenu lié à ce noeud. Les noeuds sont regroupés selon les vues pour lesquelles ils ont été sélectionnés une fois. Pour supprimer des noeuds du tableau, décochez leurs cases et cliquez sur le bouton <em>Mettre à jour</em>. Pour plus d'informations, voir l'!help."
+
+#: relatedcontent.module:779;970;1030
+msgid "Update"
+msgstr "Mise à Jour"
+
+#: relatedcontent.module:868
+msgid "RelatedContent uses <a href=\"!views-url\">views</a> as its source of nodes. The specified view %view-name doesn't exist any more. Please, go to the <a href=\"!settings-url\">settings of the content type \"@content-type\"</a> and select another view."
+msgstr " RelatedContent (Contenu Lié) utilise les <a href=\"!views-url\">vues</a> en tant que source de noeuds. La vue spécifiée %view-name n'existe plus. Veuillez vous rendre à la page de <a href=\"!settings-url\">paramètres du type de contenu \"@content-type\"</a> et sélectionner une autre vue."
+
+#: relatedcontent.module:888;962
+msgid "Next"
+msgstr "Suivant"
+
+#: relatedcontent.module:890;953
+msgid "Previous"
+msgstr "Précédent"
+
+#: relatedcontent.module:917
+msgid "Select nodes to be added to this %type. For more information, see the !help."
+msgstr "Sélectionnez les noeuds à ajouter à ce(tte) %type. Pour plus d'informations, voir l'!help."
+
+#: relatedcontent.module:1487
+msgid "RelatedContent doesn't support !db_type."
+msgstr "RelatedContent (Contenu Lié) ne supporte pas !db_type."
+
+#: relatedcontent.module:1505
+msgid "RelatedContent can't find the !query_name query for !db_type."
+msgstr "RelatedContent (Contenu Lié) ne peut pas trouvé la requête !query_name pour !db_type."
+
+#: relatedcontent.module:877;0
+msgid "relatedcontent"
+msgstr "relatedcontent (contenu lié)"
+
+#: relatedcontent.install:259
+msgid "!hook() doesn't support !db"
+msgstr "!hook() ne supporte pas !db"
+
+#: relatedcontent.install:292
+msgid "variable_set(!variable, !value)"
+msgstr ""
+
+#: relatedcontent.install:301
+msgid "variable_delete(!variable)"
+msgstr ""
+
+#: relatedcontent.info:0
+msgid "Allows privileged users to associate a node with related nodes that can be displayed along with the node."
+msgstr "Permet aux utilisateurs autorisés d'associer des noeuds liés pouvant être affichés avec un noeud."
+

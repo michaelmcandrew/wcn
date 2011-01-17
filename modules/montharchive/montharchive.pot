@@ -1,0 +1,250 @@
+# $Id: montharchive.pot,v 1.1.2.1.2.3 2009/09/12 18:36:32 prometheus6 Exp $
+#
+# LANGUAGE translation of Drupal (general)
+# Copyright YEAR NAME <EMAIL@ADDRESS>
+# Generated from files:
+#  montharchive.settings.inc: n/a
+#  montharchive.module,v 1.9.2.7 2009/09/11 23:01:19 prometheus6
+#  montharchive.info,v 1.1.2.1 2009/05/23 15:48:05 prometheus6
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"POT-Creation-Date: 2009-09-13 02:35+0800\n"
+"PO-Revision-Date: YYYY-mm-DD HH:MM+ZZZZ\n"
+"Last-Translator: NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <EMAIL@ADDRESS>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: montharchive.settings.inc:14
+msgid "Global block node types"
+msgstr ""
+
+#: montharchive.settings.inc:21
+msgid "Selected node types will be included in the global block and archive pages."
+msgstr ""
+
+#: montharchive.settings.inc:29
+msgid "Blocks by node type"
+msgstr ""
+
+#: montharchive.settings.inc:35
+msgid "Blocks and archive pages for the selected node types will be created."
+msgstr ""
+
+#: montharchive.settings.inc:44
+msgid "Author blocks by node type"
+msgstr ""
+
+#: montharchive.settings.inc:50
+msgid "Blocks and archive pages for the selected node types created by the author of the current node will be created."
+msgstr ""
+
+#: montharchive.settings.inc:57
+msgid "Maximum month links in block"
+msgstr ""
+
+#: montharchive.settings.inc:61
+msgid "Enter a number to limit the number of months linked in the block, blank or \"0\" to list all months."
+msgstr ""
+
+#: montharchive.settings.inc:67
+msgid "Sort links in chronological order"
+msgstr ""
+
+#: montharchive.settings.inc:70;87
+msgid "If checked, the list of archive links will be sorted from oldest to newest. Otherwise it will be sorted from newest to oldest"
+msgstr ""
+
+#: montharchive.settings.inc:75
+msgid "Show link count"
+msgstr ""
+
+#: montharchive.settings.inc:78
+msgid "If checked, the link to each monthly archive page in blocks will show the number of nodes in that month "
+msgstr ""
+
+#: montharchive.settings.inc:84
+msgid "Sort archive page in chronological order"
+msgstr ""
+
+#: montharchive.settings.inc:93
+msgid "Paginate archive page"
+msgstr ""
+
+#: montharchive.settings.inc:96
+msgid "If checked the output will be split into pages. The number of posts will respect the global nodes per page setting."
+msgstr ""
+
+#: montharchive.settings.inc:178
+msgid "Link text"
+msgstr ""
+
+#: montharchive.settings.inc:182
+msgid "Define how the block link text is constructed. This pattern will be used in all generated blocks."
+msgstr ""
+
+#: montharchive.settings.inc:189;335;366 montharchive.module:36
+msgid "Replacement patterns"
+msgstr ""
+
+#: montharchive.settings.inc:204
+msgid "Archive paths"
+msgstr ""
+
+#: montharchive.settings.inc:208
+msgid "Global archive root"
+msgstr ""
+
+#: montharchive.settings.inc:210
+msgid "Enter the path to use as the archive path. Please use only letters, numbers and underscores (_). No token substitution will be done on this variable. The global archive path\r\n      will be \"archive_path/year/month\"."
+msgstr ""
+
+#: montharchive.settings.inc:217
+msgid "Node type archive path"
+msgstr ""
+
+#: montharchive.settings.inc:232
+msgid "Archive by type paths"
+msgstr ""
+
+#: montharchive.settings.inc:233
+msgid "Enter the path to use as the %node_type archive path. Please use only letters, numbers and underscores (_). No token substitution will be done on this variable. "
+msgstr ""
+
+#: montharchive.settings.inc:242;293
+msgid " archive path"
+msgstr ""
+
+#: montharchive.settings.inc:252
+msgid "Author archive root"
+msgstr ""
+
+#: montharchive.settings.inc:254
+msgid "Enter the path to use as the author archive path. Please use only letters, numbers and underscores (_). No token substitution will be done on this variable. "
+msgstr ""
+
+#: montharchive.settings.inc:259
+msgid "Author path"
+msgstr ""
+
+#: montharchive.settings.inc:270
+msgid "Author archive path"
+msgstr ""
+
+#: montharchive.settings.inc:284
+msgid "Author archive by type paths"
+msgstr ""
+
+#: montharchive.settings.inc:285
+msgid "Enter the path to use as the %node_type archive path. Please use only letters, numbers and underscores (_). "
+msgstr ""
+
+#: montharchive.settings.inc:304
+msgid "Archive page titles"
+msgstr ""
+
+#: montharchive.settings.inc:307
+msgid "Global archive title"
+msgstr ""
+
+#: montharchive.settings.inc:309
+msgid "Enter the base title to use for the archive pages."
+msgstr ""
+
+#: montharchive.settings.inc:317
+msgid "Archive by type page titles"
+msgstr ""
+
+#: montharchive.settings.inc:325;356
+msgid " archive title"
+msgstr ""
+
+#: montharchive.settings.inc:349
+msgid "Author archive by type page titles"
+msgstr ""
+
+#: montharchive.module:89;117
+msgid "Monthly archives"
+msgstr ""
+
+#: montharchive.module:95;179
+msgid "Monthly %type archives"
+msgstr ""
+
+#: montharchive.module:104
+msgid "Monthly %type by author archives"
+msgstr ""
+
+#: montharchive.module:224
+msgid "more..."
+msgstr ""
+
+#: montharchive.module:251
+msgid ""
+msgstr ""
+
+#: montharchive.module:254
+msgid "Creates archives site wide and by node type."
+msgstr ""
+
+#: montharchive.module:481;493
+msgid "Monthly archive settings"
+msgstr ""
+
+#: montharchive.module:508
+msgid "Links and titles"
+msgstr ""
+
+#: montharchive.module:692
+msgid "Long month name (January, February...December)"
+msgstr ""
+
+#: montharchive.module:693
+msgid "Short month name (Jan, Feb...Dec)"
+msgstr ""
+
+#: montharchive.module:694
+msgid "Two digit month (01, 02...12)"
+msgstr ""
+
+#: montharchive.module:695
+msgid "Variable digit month (1, 2...12"
+msgstr ""
+
+#: montharchive.module:696
+msgid "Four digit year"
+msgstr ""
+
+#: montharchive.module:697
+msgid "Two digit year"
+msgstr ""
+
+#: montharchive.module:698;706
+msgid "Machine readable type name"
+msgstr ""
+
+#: montharchive.module:699;707
+msgid "Displayable type label"
+msgstr ""
+
+#: montharchive.module:704
+msgid "User's name"
+msgstr ""
+
+#: montharchive.module:705
+msgid "User' id"
+msgstr ""
+
+#: montharchive.info:0
+msgid "Month Archive"
+msgstr ""
+
+#: montharchive.info:0
+msgid "Create block containing a list of monthly archives."
+msgstr ""
+

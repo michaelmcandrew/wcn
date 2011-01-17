@@ -1,0 +1,28 @@
+<?php
+function montharchive_install() {
+
+}
+
+function montharchive_uninstall() {
+  variable_del('montharchive_include_node_type');
+  variable_del('montharchive_block_node_type');
+
+  variable_del('montharchive_block_link_max');
+  variable_del('montharchive_rev_linksort');
+  variable_del('montharchive_show_linkcount');
+  variable_del('montharchive_rev_pagesort');
+  variable_del('montharchive_paginate');
+  variable_del('montharchive_link_text');
+  variable_del('montharchive_path');
+  variable_del('montharchive_title');
+  variable_del('montharchive_path_order');
+  $node_types = node_get_types('names');
+  foreach ($node_types as $key => $node_type) {
+    if ($node_type) {
+      variable_del('montharchive_'. $key .'_path');
+      variable_del('montharchive_'. $key .'_title');
+      variable_del('montharchive_path_by_user'. $key);
+      variable_del('montharchive_title_by_user'. $key);
+    }
+  }
+}
