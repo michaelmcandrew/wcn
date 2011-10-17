@@ -39,15 +39,17 @@ function _mollom_authentication($public_key = NULL, $private_key = NULL) {
   }
 
   // Generate a timestamp according to the dateTime format (http://www.w3.org/TR/xmlschema-2/#dateTime):
-  $time = gmdate("Y-m-d\TH:i:s.\\0\\0\\0O", REQUEST_TIME);
+  $time = gmdate("Y-m-d\TH:i:s.\\0\\0\\0O", time());
 
   // Generate a random number:
   $nonce = md5(mt_rand());
 
-  // Calculate a HMAC-SHA1 according to RFC 2104.
-  // @see http://www.ietf.org/rfc/rfc2104.txt
-  $request_data = $time . ':' . $nonce . ':' . $private_key;
-  $hash = base64_encode(hash_hmac('sha1', $request_data, $private_key, TRUE));
+  // Calculate a HMAC-SHA1 according to RFC2104 (http://www.ietf.org/rfc/rfc2104.txt):
+  $hash = base64_encode(
+    pack('H*', sha1((str_pad($private_key, 64, chr(0x00)) ^ (str_repeat(chr(0x5c), 64))) .
+    pack('H*', sha1((str_pad($private_key, 64, chr(0x00)) ^ (str_repeat(chr(0x36), 64))) .
+    $time . ':' . $nonce . ':' . $private_key))))
+  );
 
   // Store everything in an array.  Elsewhere in the code, we'll add the
   // actual data before we pass it onto the XML-RPC library:
@@ -75,7 +77,7 @@ function _mollom_retrieve_server_list() {
   // which case there must be a configuration error (e.g., invalid API keys).
   $method = 'mollom.getServerList';
   foreach ($servers as $server) {
-    $result = xmlrpc($server . '/' . MOLLOM_API_VERSION, array($method => array(_mollom_authentication())));
+    $result = xmlrpc($server . '/' . MOLLOM_API_VERSION, $method, _mollom_authentication());
     if ($result === FALSE && ($error = xmlrpc_error())) {
       // In any case, log the error.
       $messages[] = array(

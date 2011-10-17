@@ -5,24 +5,17 @@
  *
  * Required for valid XHTML Strict markup.
  */
-Drupal.behaviors.mollomPrivacy = {
-  attach: function (context) {
-    $('.mollom-privacy a', context).click(function () {
-      this.target = '_blank';
-    });
-  }
+Drupal.behaviors.mollomPrivacy = function (context) {
+  $('.mollom-privacy a', context).click(function () {
+    this.target = '_blank';
+  });
 };
 
 /**
  * Attach click event handlers for CAPTCHA links.
  */
-Drupal.behaviors.mollomCaptcha = {
-  attach: function (context, settings) {
-    // @todo Pass the local settings we get from Drupal.attachBehaviors(), or
-    //   inline the click event handlers, or turn them into methods of this
-    //   behavior object.
-    $('a.mollom-switch-captcha', context).click(getMollomCaptcha);
-  }
+Drupal.behaviors.mollomCaptcha = function (context) {
+  $('a.mollom-switch-captcha', context).click(getMollomCaptcha);
 };
 
 /**
@@ -34,12 +27,11 @@ function getMollomCaptcha() {
 
   var context = $(this).parents('form');
 
-  // Extract the Mollom session id and form build id from the form.
+  // Extract the Mollom session id from the form.
   var mollomSessionId = $('input.mollom-session-id', context).val();
-  var formBuildId = $('input[name="form_build_id"]', context).val();
 
   // Retrieve a CAPTCHA:
-  $.getJSON(Drupal.settings.basePath + 'mollom/captcha/' + newCaptchaType + '/' + formBuildId + '/' + mollomSessionId,
+  $.getJSON(Drupal.settings.basePath + 'mollom/captcha/' + newCaptchaType + '/' + mollomSessionId,
     function (data) {
       if (!(data && data.content)) {
         return;

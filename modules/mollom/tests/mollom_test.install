@@ -42,3 +42,17 @@ function mollom_test_schema() {
   return $schema;
 }
 
+/**
+ * Implements hook_install().
+ */
+function mollom_test_install() {
+  drupal_install_schema('mollom_test');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function mollom_test_uninstall() {
+  drupal_uninstall_schema('mollom_test');
+}
+
